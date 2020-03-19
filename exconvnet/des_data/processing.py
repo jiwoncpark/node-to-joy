@@ -1,8 +1,24 @@
 """Process downloaded data.
 """
 
-def process(arr):
-    """Process raw DES data according to the config
+def gen_labels(arr):
+    """Generate y labels for given raw DES data
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Numpy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
+
+    Returns
+    -------
+    arr : np.ndarray
+    """
+    pass
+
+def compute_
+
+def process(arr, autogen_y=True):
+    """Process raw DES data into some training data
 
     Parameters
     ----------
@@ -15,7 +31,15 @@ def process(arr):
     -------
     arr : np.ndarray
     """
-    return arr
+
+    # compute x
+
+    # 
+    x = arr
+
+    # for now we'll generate y-labels
+    y = gen_labels(arr)
+    return (x, y)
 
 
 if __name__ == '__main__':

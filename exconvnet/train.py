@@ -34,7 +34,11 @@ import h0rton.train_utils as train_utils
 def parse_args():
     """Parse command-line arguments
     """
-    pass
+    parser = argparse.ArgumentParser(description='Train a model to infer external convergence')
+    parser.add_argument('user_cfg_path', help='path to the user-defined training config file')
+    args = parser.parse_args()
+
+    return args
 
 def seed_everything(global_seed):
     """Seed everything for reproducibility
@@ -42,13 +46,32 @@ def seed_everything(global_seed):
     global_seed : int
         seed for `np.random`, `random`, and relevant `torch` backends
 
-
     """
-    pass
+    np.random.seed(global_seed)
+    random.seed(global_seed)
+    torch.cuda.manual_seed_all(global_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def main():
-    pass
+    args = parse_args()
+    cfg = TrainValConfig.from_file(args.user_cfg_path)
+    # Set device and default data type
+    if device.type == 'cuda':
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    else:
+        torch.set_default_tensor_type('torch.FloatTensor')
+
+    seed_everything(cfg.global_seed)
+
+
+    ############
+    # Data I/O #
+    ############
+    
+
+
 
 if __name__ == '__main__':
     main()
