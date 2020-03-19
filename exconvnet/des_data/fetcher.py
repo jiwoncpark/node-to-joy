@@ -1,13 +1,17 @@
-from download import downloader
-from processing import process
+from .downloader import download
+from .processing import process
 
-def fetch(config_fname):
+def fetch(verbose=True):
     """User-level method to do end-to-end fetching of DES data
 
-    config_fname : str
-        file name/path for a YAML file specifying what data to fetch
+    config : dict
+        dictionary specifying what data to fetch and how
     """
 
-    downloader()
+    # download the data
+    arr = download(verbose=verbose)
 
-    return np.random.rand()
+    # process the data
+    arr = process(arr)
+
+    return arr
