@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 #print(required_packages)
 
 setup(
-      name='ex-con',
+      name='exconvnet',
       version='0.1',
       author='Ji Won Park, Rodrigo Castellon',
       author_email='jiwon.christine.park@gmail.com, rjcaste@stanford.edu',

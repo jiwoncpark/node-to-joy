@@ -7,7 +7,7 @@
 *.h5
 *.hdf5
 *.png
-ex-con/des_data/*
+exconvnet/des_data/*
 
 # HTML builds
 docs/_build/*
