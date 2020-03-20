@@ -8,6 +8,8 @@ from .downloading_utils import *
 
 # TODO add logging to prevent print statements from becoming a nuisance
 
+__all__ = ['download']
+
 def download(indices=[0], links=[], verbose=False, delete_fits=True):
     """Download the requested files as specified by either
     indices (line numbers of online plaintext TXT file)

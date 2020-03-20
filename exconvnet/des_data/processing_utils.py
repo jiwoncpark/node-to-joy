@@ -1,6 +1,10 @@
 """A file containing utils for processing.py
 """
 
+import numpy as np
+
+__all__ = ['strip2RAdec', 'compute_LOS_no_recurse', 'compute_LOS_helper', 'compute_LOS']
+
 def strip2RAdec(arr):
     """Strip the raw DES data into a set of (ra, dec) coordinates
     for stars and galaxies.
@@ -40,7 +44,7 @@ def compute_LOS_no_recurse(coords, ra_bounds, dec_bounds):
     return set()
     pass
 
-def compute_LOS_set_helper(coords, ra_bounds=(0,360), dec_bounds=(-70,10),
+def compute_LOS_helper(coords, ra_bounds=(0,360), dec_bounds=(-70,10),
                            threshold=100, num_rects=4):
     """Compute the set of all LOS's we could analyze
     with a given set of points for stars/galaxies.
@@ -80,7 +84,7 @@ def compute_LOS_set_helper(coords, ra_bounds=(0,360), dec_bounds=(-70,10),
 
     return LOS
 
-def compute_LOS_set(arr):
+def compute_LOS(arr):
     """Compute the set of all LOS's we could analyze
     within a given raw DES dataset.
 

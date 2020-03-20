@@ -8,6 +8,8 @@ import urllib.request
 
 DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
 
+__all__ = ['downlink', 'clear_folder', 'prep_links']
+
 def downlink(downlink_dir, links, verbose=False):
     """Downlink from the official DES data repository into FITS files.
 

@@ -2,6 +2,8 @@
 """
 import numpy as np
 
+__all__ = ['gen_labels', 'process']
+
 def gen_labels(arr):
     """Generate y labels for given raw DES data
 
@@ -36,7 +38,7 @@ def process(arr, autogen_y=True):
     # compute the training examples that we could do from arr
     x = arr
     # will be
-    # x = compute_LOS_set(arr) eventually
+    # x = compute_LOS(arr) eventually
 
     # for now we'll generate y-labels
     y = gen_labels(arr)
