@@ -24,7 +24,6 @@ def downlink(downlink_dir, links, verbose=False):
         each element is a string path to a downlinked FITS file
     """
 
-    N = len(links)
     fits_files = []
     for i, link in enumerate(links):
         if verbose:
@@ -39,7 +38,7 @@ def downlink(downlink_dir, links, verbose=False):
     
     return fits_files
 
-def clear_folder(path):
+def clear_folder(path, verbose=False):
     """Clear out the contents of a folder.
 
     Parameters

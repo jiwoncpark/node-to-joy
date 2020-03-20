@@ -1,5 +1,6 @@
 """Process downloaded data.
 """
+import numpy as np
 
 def gen_labels(arr):
     """Generate y labels for given raw DES data
@@ -15,44 +16,6 @@ def gen_labels(arr):
     """
     pass
 
-def strip2RAdec(arr):
-    """Strip the raw DES data into a set of (ra, dec) coordinates
-    for stars and galaxies.
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        array of shape (N,) where each row corresponds to information about a star/galaxy.
-
-    Returns
-    -------
-    coords : np.ndarray
-        array of shape (N,2) where each row corresponds to (ra, dec) of a star/galaxy.
-    """
-    return np.array([[x[1], x[2]] for x in arr])
-
-def compute_LOS_set(arr):
-    """Compute the set of all LOS's we could analyze
-    with a given raw DES dataset.
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        Raw DES data
-
-    Returns
-    -------
-    LOS : np.ndarray
-        A NumPy ndarray of shape (N, 2) where each row represents a possible LOS
-    """
-
-    coords = strip2RAdec(arr)
-
-    # get 
-
-    LOS = np.empty(5,5)
-    return LOS
-
 def process(arr, autogen_y=True):
     """Process raw DES data into some training data.
 
@@ -60,8 +23,8 @@ def process(arr, autogen_y=True):
     ----------
     arr : np.ndarray
         NumPy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
-    config : dict
-        Dictionary that specifies how to process the raw data
+    autogen_y : bool
+        Should automatically generate y in some deterministic way?
 
     Returns
     -------
@@ -72,14 +35,15 @@ def process(arr, autogen_y=True):
 
     # compute the training examples that we could do from arr
     x = arr
+    # will be
+    # x = compute_LOS_set(arr) eventually
 
     # for now we'll generate y-labels
     y = gen_labels(arr)
     return (x, y)
 
-
 if __name__ == '__main__':
-    from downloader import download
+    from .downloader import download
     import time
 
     start = time.time()

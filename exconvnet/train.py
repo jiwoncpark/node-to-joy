@@ -20,16 +20,13 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-# h0rton modules
-'''
-from h0rton.trainval_data import XYData
-from h0rton.configs import TrainValConfig
-import h0rton.losses
-import h0rton.models
-import h0rton.h0_inference
-import h0rton.train_utils as train_utils
-'''
-
+# exconvnet modules
+from exconvnet.trainval_data import XYData
+from exconvnet.configs import TrainValConfig
+import exconvnet.losses
+import exconvnet.models
+import exconvnet.inference
+import exconvnet.train_utils as train_utils
 
 def parse_args():
     """Parse command-line arguments
@@ -69,7 +66,38 @@ def main():
     ############
     # Data I/O #
     ############
-    
+
+    # Define training data and loader
+    torch.multiprocessing.set_start_method('spawn', force=True)
+    train_data = XYData(cfg.data.train_dir, data_cfg=cfg.data)
+    train_loader = DataLoader(train_data, batch_size=cfg.optim.batch_size, shuffle=True, drop_last=True, num_workers=4, pin_memory=True)
+    n_train = train_data.n_data - (train_data.n_data % cfg.optim.batch_size)
+
+    # Define val data and loader
+    val_data = XYData(cfg.data.val_dir, data_cfg=cfg.data)
+    val_loader = DataLoader(val_data, batch_size=cfg.optim.batch_size, shuffle=False, drop_last=True, num_workers=4, pin_memory=True)
+    n_val = val_data.n_data - (val_data.n_data % cfg.optim.batch_size)
+
+    if cfg.data.test_dir is not None:
+        pass
+
+    #########
+    # Model #
+    #########
+
+    # Instantiate loss function
+    loss_fn = getattr(exconvnet.losses, cfg.model.likelihood_class)(Y_dim=cfg.data.Y_dim, device=device)
+    # Instantiate posterior (for logging)
+    post = getattr(exconvnet.inference.posterior, loss_fn.posterior_name)(val_data.Y_dim, device, val_data.train_Y_mean, val_data.train_Y_std)
+    # Instantiate model
+    net = getattr(exconvnet.models, cfg.model.architecture)(num_classes=loss_fn.out_dim)
+    net.to(device)
+
+    ################
+    # Optimization #
+    ################
+
+    # Instantiate optimizer
 
 
 
