@@ -4,18 +4,25 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
-class XYData(Dataset):
-    """Represents the XYData used to train or validate our models
+class ExConvDataset(Dataset):
+    """Represents the x/y data used to train or validate our models
 
     """
-    def __init__(self):
+    def __init__(self, ):
+        """
+        Parameters
+        ----------
+        
+
+        """
+        # get 
         pass
     def __len__(self):
         pass
     def __getitem__(self, idx):
         pass
 
-class XData(dataset):
+class ExConvTestSet(dataset):
     """Represents the XData used to test our models
 
     """

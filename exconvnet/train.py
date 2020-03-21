@@ -21,7 +21,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 # exconvnet modules
-from exconvnet.trainval_data import XYData
+from exconvnet.trainval_data import ExConvDataset
 from exconvnet.configs import TrainValConfig
 import exconvnet.losses
 import exconvnet.models
@@ -69,7 +69,7 @@ def main():
 
     # Define training data and loader
     torch.multiprocessing.set_start_method('spawn', force=True)
-    train_data = XYData(cfg.data.train_dir, data_cfg=cfg.data)
+    train_data = ExConvDataset(cfg.data.train_dir, data_cfg=cfg.data)
     train_loader = DataLoader(train_data, batch_size=cfg.optim.batch_size, shuffle=True, drop_last=True, num_workers=4, pin_memory=True)
     n_train = train_data.n_data - (train_data.n_data % cfg.optim.batch_size)
 

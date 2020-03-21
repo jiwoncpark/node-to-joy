@@ -2,7 +2,7 @@
 """
 import numpy as np
 
-__all__ = ['gen_labels', 'process']
+__all__ = ['gen_labels', 'process', 'strip2RAdec']
 
 def gen_labels(arr):
     """Generate y labels for given raw DES data

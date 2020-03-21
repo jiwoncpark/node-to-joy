@@ -1,3 +1,3 @@
 # init
 from .fetcher import fetch
-from .processing import strip2RAdec
+from .processing_utils import strip2RAdec

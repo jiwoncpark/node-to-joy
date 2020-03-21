@@ -6,9 +6,7 @@ import numpy as np
 import os, shutil
 import urllib.request
 
-DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
-
-__all__ = ['downlink', 'clear_folder', 'prep_links']
+__all__ = ['downlink', 'clear_folder']
 
 def downlink(downlink_dir, links, verbose=False):
     """Downlink from the official DES data repository into FITS files.
@@ -60,25 +58,3 @@ def clear_folder(path, verbose=False):
             if verbose:
                 print('Failed to delete FITS file \'{}\'. Reason: {}'.format(fpath, e))
 
-def prep_links(indices):
-    """Prepare links given line numbers of the TXT
-    file to use.
-
-    Parameters
-    ----------
-    indices : list
-        list of indices/line numbers of TXT file to use
-
-    Returns
-    -------
-    links : list
-        list of links to use
-    """
-
-    global DES_LINKS_TXT
-    links = []
-    for link in urllib.request.urlopen(DES_LINKS_TXT):
-        links.append(link.decode('utf-8')[:-1])
-    links = np.array(links)[indices]
-    
-    return links

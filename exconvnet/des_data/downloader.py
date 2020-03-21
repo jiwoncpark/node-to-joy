@@ -3,6 +3,7 @@
 
 from astropy.io import fits
 import numpy as np
+import os
 
 from .downloading_utils import *
 
@@ -10,15 +11,12 @@ from .downloading_utils import *
 
 __all__ = ['download']
 
-def download(indices=[0], links=[], verbose=False, delete_fits=True):
-    """Download the requested files as specified by either
-    indices (line numbers of online plaintext TXT file)
-    or links to numpy array. Links takes precedence over indices.
+def download(links, verbose=False, delete_fits=True):
+    """Download the requested files from the given list
+    of links.
 
     Parameters
     ----------
-    indices : list
-        list of indices of TXT file to use
     links : list
         list of links to use
     verbose : bool
@@ -42,8 +40,6 @@ def download(indices=[0], links=[], verbose=False, delete_fits=True):
         os.makedirs(download_dir, mode=0o777, exist_ok=False)
     
     # get URLs from online plaintext list of links
-    if len(links) == 0:
-        links = prep_links(indices)
     fits_files = downlink(download_dir, links, verbose)
 
     # now convert these FITS files to numpy arrays and save them as an .npy file
