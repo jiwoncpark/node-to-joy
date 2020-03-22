@@ -19,7 +19,7 @@ def gen_labels(arr):
     pass
 
 def process(arr, autogen_y=True):
-    """Process raw DES data into some training data.
+    """Process raw DES data into some training data for our models.
 
     Parameters
     ----------
@@ -33,10 +33,9 @@ def process(arr, autogen_y=True):
     arr : np.ndarray
     """
 
-    # compute x
-
     # compute the training examples that we could do from arr
-    x = arr
+    sightlines = 
+    X = compute_X(arr, sightlines)
     # will be
     # x = compute_LOS(arr) eventually
 
