@@ -1,6 +1,7 @@
 """Process downloaded data.
 """
 import numpy as np
+from .processing_utils import gen_sightlines
 
 __all__ = ['gen_labels', 'process', 'strip2RAdec']
 
@@ -18,13 +19,15 @@ def gen_labels(arr):
     """
     pass
 
-def process(arr, autogen_y=True):
+def process(arr, sightlines=None, autogen_y=True):
     """Process raw DES data into some training data for our models.
 
     Parameters
     ----------
     arr : np.ndarray
         NumPy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
+    sightlines : np.ndarray
+        NumPy ndarray where each row is a coordinate of a LOS
     autogen_y : bool
         Should automatically generate y in some deterministic way?
 
@@ -34,10 +37,9 @@ def process(arr, autogen_y=True):
     """
 
     # compute the training examples that we could do from arr
-    sightlines = 
+    if sightlines is None:
+        sightlines = gen_sightlines()
     X = compute_X(arr, sightlines)
-    # will be
-    # x = compute_LOS(arr) eventually
 
     # for now we'll generate y-labels
     y = gen_labels(arr)

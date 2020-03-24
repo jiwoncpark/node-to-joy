@@ -9,7 +9,7 @@ class ToLinks():
         self.indices = indices
         self.links = links
         self.tilenames = tilenames
-
+        self.DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
     def to_links(self):
         """Take user input (sightlines, indices, links, tilenames)
         and just return the list of links that the user intended
@@ -77,9 +77,9 @@ class ToLinks():
         links : list
             A list of links
         """
-        DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
+        
         links = []
-        for link in urllib.request.urlopen(DES_LINKS_TXT):
+        for link in urllib.request.urlopen(self.DES_LINKS_TXT):
             links.append(link.decode('utf-8')[:-1])
         links = np.array(links)[indices]
         return links
@@ -104,9 +104,8 @@ class ToLinks():
 
         return tilenames2links(tilenames)
 
-    def sightline2tilename(self, sightline):
-        """Convert a given sightline into its corresponding
-        tilename
+    def _sightline2tilename(self, sightline):
+        """Determine which tile a given sightline resides in.
 
         Parameters
         ----------
@@ -118,7 +117,12 @@ class ToLinks():
         tilename : str
             Tilename that bounds the given sightline
         """
-        pass
+
+        links = []
+        for link in urllib.request.urlopen(self.DES_LINKS_TXT):
+            links.append(link.decode('utf-8')[:-1])
+
+
 
 
 
