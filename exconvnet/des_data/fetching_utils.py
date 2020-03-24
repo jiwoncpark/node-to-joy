@@ -32,26 +32,21 @@ class ToLinks():
             list of links to use
         """
 
-        if len(links) != 0:
-            return links
-        elif len(tilenames) != 0:
-            links = _from_tilenames(tilenames)
+        if len(self.links) != 0:
+            return self.links
+        elif len(self.tilenames) != 0:
+            links = _from_tilenames()
             return links
         elif len(indices) != 0:
-            links = _from_indices(indices)
+            links = _from_indices()
             return links
         else:
-            links = _from_sightlines(sightlines)
+            links = _from_sightlines()
             return links
 
-    def _from_tilenames(self, tilenames):
+    def _from_tilenames(self, tilenames=self.tilenames):
         """Convert a list of tilenames to their corresponding DES
         data links.
-
-        Parameters
-        ----------
-        tilenames : list
-            A list of tilenames
 
         Returns
         -------
@@ -63,14 +58,9 @@ class ToLinks():
         links = [prefix + tilename + suffix for tilename in tilenames]
         return links
 
-    def _from_indices(self, indices):
+    def _from_indices(self, indices=self.indices):
         """Convert a list of indices (line numbers of the plaintext
         file containing links to DES data) to links.
-
-        Parameters
-        ----------
-        indices : list
-            A list of indices
 
         Returns
         -------
@@ -81,10 +71,10 @@ class ToLinks():
         links = []
         for link in urllib.request.urlopen(self.DES_LINKS_TXT):
             links.append(link.decode('utf-8')[:-1])
-        links = np.array(links)[indices]
+        links = np.array(links)[self.indices]
         return links
 
-    def _from_sightlines(self, sightlines):
+    def _from_sightlines(self, sightlines=self.sightlines):
         """Convert a grid of sightlines into a list of links to
         DES data.
 
@@ -102,7 +92,10 @@ class ToLinks():
         
         tilenames = []
 
-        return tilenames2links(tilenames)
+        for sightline in sightlines:
+            tilenames.append(_sightline2tilename(sightline))
+
+        return _from_tilenames(tilenames=tilenames)
 
     def _sightline2tilename(self, sightline):
         """Determine which tile a given sightline resides in.
@@ -118,11 +111,11 @@ class ToLinks():
             Tilename that bounds the given sightline
         """
 
-        links = []
+        tilenames = []
         for link in urllib.request.urlopen(self.DES_LINKS_TXT):
-            links.append(link.decode('utf-8')[:-1])
+            tilenames.append(link.decode('utf-8')[:-1])
 
-
+        
 
 
 

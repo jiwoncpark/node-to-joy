@@ -1,6 +1,6 @@
 from .downloader import download
 from .processing import process
-from .fetching_utils import to_links
+from .fetching_utils import ToLinks
 
 __all__ = ['fetch']
 
@@ -12,6 +12,8 @@ def fetch(sightlines=None, indices=[0], links=[], tilenames=[], verbose=True):
     at http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt
     or a list of links or a list of tilenames.
 
+    sightlines : np.ndarray
+        A (k, 2) array where each row is a sightline
     indices : list
         list of indices/line numbers for the TXT file of links
     links : list

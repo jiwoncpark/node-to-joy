@@ -6,7 +6,9 @@ from .processing_utils import gen_sightlines
 __all__ = ['gen_labels', 'process', 'strip2RAdec']
 
 def gen_labels(arr):
-    """Generate y labels for given raw DES data
+    """Generate y labels for given raw DES data by
+    getting the mean magnitude of the objects and dividing
+    it by 1000.
 
     Parameters
     ----------
@@ -17,7 +19,7 @@ def gen_labels(arr):
     -------
     arr : np.ndarray
     """
-    pass
+    return np.mean([obj[39] for obj in arr]) / 1000
 
 def process(arr, sightlines=None, autogen_y=True):
     """Process raw DES data into some training data for our models.
