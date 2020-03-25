@@ -5,6 +5,7 @@ __all__ = ['sightlines2links']
 
 DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
 
+# FIX DEGREES HERE
 def sightlines2links(sightlines):
     """Convert a grid of sightlines into a list of links to
     DES data.
@@ -20,7 +21,6 @@ def sightlines2links(sightlines):
         A list of links
     """
 
-    # convert to tilenames
     tilenames = set()
     bounds = get_bounds()
 
@@ -50,8 +50,6 @@ def sightline2tilename(sightline, bounds):
         Tilename that bounds the given sightline
     """
 
-    print('sightline:',sightline)
-
     cond_1 = np.logical_and(sightline[0] > bounds[:,0], sightline[0] < bounds[:,1])
     cond_2 = np.logical_and(sightline[1] > bounds[:,2], sightline[1] < bounds[:,3])
     cond = np.logical_and(cond_1, cond_2)
@@ -61,11 +59,15 @@ def sightline2tilename(sightline, bounds):
         assert(matches.shape == (1,))
     except AssertionError:
         if matches.shape != (0,):
+            pass
             print('got matches {}'.format(matches))
+        else:
+            print('sightline {}\t'.format(sightline), end='')
+            #print('np.where(cond_1) = {}'.format(np.where(cond_1)))
+            #print('np.where(cond_2) = {}'.format(np.where(cond_2)))
         return None
     return matches[0]
 
-    
 def get_bounds():
     """Get the bounds for all of the tiles of the DES
     dataset.
@@ -77,21 +79,24 @@ def get_bounds():
         is [ra_lowerbound, ra_upperbound, dec_lowerbound, dec_upperbound]
     """
 
-    SIDELENGTH_HOUR100 = 4.8667 # side length 0.73 deg. in 100 * hours units
-    SIDELENGTH_DEG100 = 73 # side length 0.73 deg. in 100 * degrees units
-
-    # effective side lengths
-    SIDELENGTH_HOUR100_EFF = 2 * SIDELENGTH_HOUR100
-    SIDELENGTH_DEG100_EFF = 2 * SIDELENGTH_DEG100
+    # sidelengths
+    SLENGTH = 0.73
+    SLENGTH_EFF = 2 * SLENGTH
+    # effective side length is because the coordinate label for a tile could lie
+    # anywhere within the tile, so the effective tile given a coordinate label is
+    # has twice the sidelength
 
     global DES_LINKS_TXT
     bounds = []
 
     for link in urllib.request.urlopen(DES_LINKS_TXT):
         str_coord = link.decode('utf-8')[76:85]
-        hourmin_ra, dec = str_coord[:4], int(str_coord[4:])
+
+        # getting ra and dec in units of degrees
+        hourmin_ra, dec = str_coord[:4], int(str_coord[4:]) / 100
         ra = int(hourmin_ra[:2]) * 360 / 24 + int(hourmin_ra[2:]) * 360 / 1440
-        bound = [ra - SIDELENGTH_HOUR100_EFF / 2, ra + SIDELENGTH_HOUR100_EFF / 2, dec - SIDELENGTH_DEG100_EFF / 2, dec + SIDELENGTH_DEG100_EFF / 2]
+
+        bound = [ra - SLENGTH_EFF / 2, ra + SLENGTH_EFF / 2, dec - SLENGTH_EFF / 2, dec + SLENGTH_EFF / 2]
         bounds.append(bound)
     bounds = np.array(bounds)
     

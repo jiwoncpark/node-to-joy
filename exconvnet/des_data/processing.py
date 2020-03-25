@@ -21,7 +21,7 @@ def gen_labels(arr):
     """
     return np.mean([obj[39] for obj in arr]) / 1000
 
-def process(arr, sightlines=None, autogen_y=True):
+def process(arr, sightlines, autogen_y=True):
     """Process raw DES data into some training data for our models.
 
     Parameters
@@ -39,8 +39,6 @@ def process(arr, sightlines=None, autogen_y=True):
     """
 
     # compute the training examples that we could do from arr
-    if sightlines is None:
-        sightlines = gen_sightlines()
     X = compute_X(arr, sightlines)
 
     # for now we'll generate y-labels
