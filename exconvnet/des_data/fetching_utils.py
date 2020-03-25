@@ -32,7 +32,7 @@ def sightlines2links(sightlines):
         indices = indices.union(new_indices)
 
     indices = list(indices)
-    print('got indices {}'.format(indices))
+    #print('got indices {}'.format(indices))
 
     return indices2links(indices)
 
@@ -56,7 +56,7 @@ def sightline2indices(sightline, tree):
     MAX_DIST = 1.0657092338 # = 0.73 * sqrt(2) deg + 2 arcmin = ( 0.73 * sqrt(2) + .03333 ) deg
 
     matches = tree.query_ball_point(sightline, MAX_DIST)
-    print('got matches {} for sightline {}'.format(matches, sightline))
+    #print('got matches {} for sightline {}'.format(matches, sightline))
 
     return set(matches)
 

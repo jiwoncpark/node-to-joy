@@ -4,7 +4,23 @@
 import numpy as np
 from scipy.spatial import KDTree
 
-__all__ = ['strip2RAdec', 'gen_sightlines', 'compute_X']
+__all__ = ['gen_labels', 'strip2RAdec', 'gen_sightlines', 'compute_X']
+
+def gen_labels(arr):
+    """Generate y labels for given raw DES data by
+    getting the mean magnitude of the objects and dividing
+    it by 1000.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Numpy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
+
+    Returns
+    -------
+    arr : np.ndarray
+    """
+    return np.mean([obj[39] for obj in arr]) / 1000
 
 def strip2RAdec(arr):
     """Strip the raw DES data into a set of (ra, dec) coordinates
@@ -22,7 +38,7 @@ def strip2RAdec(arr):
     """
     return np.array([[x[1], x[2]] for x in arr])
 
-def gen_sightlines(ra_bound=(10, 80), dec_bound=(-55, -45), root_k=50):
+def gen_sightlines(ra_bound=(10, 15), dec_bound=(-55, -50), root_k=50):
     """Generate a grid of sightlines. Each sightline is (ra, dec) in units
     of degrees.
 
@@ -95,11 +111,13 @@ def compute_X(arr, sightlines):
         within a radius of 2 arcminutes of the LOS
     """
 
+    k = sightlines.shape[0]
+
     X = np.empty((k, ), dtype='O')
     coords = strip2RAdec(arr)
     tree = KDTree(coords)
 
-    for i in range(k):
+    for i, sightline in enumerate(sightlines):
         X[i] = get_x_i(sightline, tree, arr)
 
     return X

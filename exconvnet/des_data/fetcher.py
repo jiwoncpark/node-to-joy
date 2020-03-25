@@ -32,6 +32,7 @@ def fetch(sightlines=None, verbose=True):
     # download the data
     arr = download(links, verbose=verbose)
 
+    print('got arr of shape {}'.format(arr.shape))
     # process the data
     X, Y = process(arr, sightlines)
 

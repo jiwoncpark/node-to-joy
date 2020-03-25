@@ -1,25 +1,9 @@
 """Process downloaded data.
 """
 import numpy as np
-from .processing_utils import gen_sightlines
+from .processing_utils import gen_labels, gen_sightlines, compute_X
 
-__all__ = ['gen_labels', 'process', 'strip2RAdec', 'gen_sightlines']
-
-def gen_labels(arr):
-    """Generate y labels for given raw DES data by
-    getting the mean magnitude of the objects and dividing
-    it by 1000.
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        Numpy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
-
-    Returns
-    -------
-    arr : np.ndarray
-    """
-    return np.mean([obj[39] for obj in arr]) / 1000
+__all__ = ['process', 'strip2RAdec', 'gen_sightlines']
 
 def process(arr, sightlines, autogen_y=True):
     """Process raw DES data into some training data for our models.
@@ -42,8 +26,8 @@ def process(arr, sightlines, autogen_y=True):
     X = compute_X(arr, sightlines)
 
     # for now we'll generate y-labels
-    y = gen_labels(arr)
-    return (x, y)
+    Y = gen_labels(arr)
+    return (X, Y)
 
 if __name__ == '__main__':
     from .downloader import download
