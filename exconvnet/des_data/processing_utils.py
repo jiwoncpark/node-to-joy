@@ -40,13 +40,13 @@ def gen_sightlines(ra_bound=(400, 900), dec_bound=(-5500, -4500), root_k=50):
         A NumPy ndarray of shape (k, 2) where each row is a sightline.
     """
 
-    ras = np.linspace(400, 900, num=root_k)
-    decs = np.linspace(-5500, -4500, num=root_k)
+    ras = np.linspace(ra_bound[0], ra_bound[1], num=root_k)
+    decs = np.linspace(dec_bound[0], dec_bound[1], num=root_k)
     sightlines = np.array(np.meshgrid(ras, decs)).T.reshape(-1, 2)
 
     return sightlines
 
-def get_x_i(sightline, coords, arr, THRESHOLD=0.0333333333):
+def get_x_i(sightline, tree, arr, THRESHOLD=0.0333333333):
     """Given a sightline and raw DES array, get all
     galaxies within a threshold angular distance of the sightline.
 
@@ -54,8 +54,8 @@ def get_x_i(sightline, coords, arr, THRESHOLD=0.0333333333):
     ----------
     sightline : np.ndarray
         A tuple representing the sightline
-    coords : np.ndarray
-        array of shape (N,2) where each row corresponds to (ra, dec) of a star/galaxy.
+    tree : np.ndarray
+        kd-tree constructed with the ra and dec of all of the elements of arr
     arr : np.ndarray
         Raw DES data
     THRESHOLD : float
@@ -67,9 +67,6 @@ def get_x_i(sightline, coords, arr, THRESHOLD=0.0333333333):
         A list where each element is a galaxy within a threshold of the LOS,
         ordered by distance from LOS
     """
-
-    # using a kd-tree for fast nearest neighbor lookup
-    tree = KDTree(coords)
 
     # filter by the ones within the THRESHOLD distance to the LOS
     x_i = arr[tree.query_ball_point(sightline, THRESHOLD)]
@@ -99,9 +96,10 @@ def compute_X(arr, sightlines):
 
     X = np.empty((k, ), dtype='O')
     coords = strip2RAdec(arr)
+    tree = KDTree(coords)
 
     for i in range(k):
-        X[i] = get_x_i(sightline, coords, arr)
+        X[i] = get_x_i(sightline, tree, arr)
 
     return X
 

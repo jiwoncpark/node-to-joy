@@ -3,7 +3,7 @@
 import numpy as np
 from .processing_utils import gen_sightlines
 
-__all__ = ['gen_labels', 'process', 'strip2RAdec']
+__all__ = ['gen_labels', 'process', 'strip2RAdec', 'gen_sightlines']
 
 def gen_labels(arr):
     """Generate y labels for given raw DES data by
