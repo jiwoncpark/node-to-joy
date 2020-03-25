@@ -1,5 +1,6 @@
 import numpy as np
 import urllib.request
+from scipy.spatial import KDTree
 
 __all__ = ['sightlines2links']
 
@@ -21,73 +22,56 @@ def sightlines2links(sightlines):
         A list of links
     """
 
-    tilenames = set()
-    bounds = get_bounds()
+    indices = set()
+    coords = get_coords()
+
+    tree = KDTree(coords)
 
     for sightline in sightlines:
-        tilename = sightline2tilename(sightline, bounds)
-        if not(tilename is None):
-            tilenames.add(tilename)
+        new_indices = sightline2indices(sightline, tree)
+        indices = indices.union(new_indices)
 
-    print('got tilenames {}'.format(tilenames))
+    indices = list(indices)
+    print('got indices {}'.format(indices))
 
-    return tilenames2links(list(tilenames))
+    return indices2links(indices)
 
-def sightline2tilename(sightline, bounds):
-    """Determine which tiles a sightline could correspond to.
+def sightline2indices(sightline, tree):
+    """Determine which tiles a sightline could correspond to, encoded
+    as index/line number of the plaintext DES file.
 
     Parameters
     ----------
     sightline : np.ndarray
         A NumPy array of shape (1, 2)
-    bounds : np.ndarray
-        NumPy ndarray of shape (3779, 4) where each row
-        is [ra_lowerbound, ra_upperbound, dec_lowerbound, dec_upperbound]
+    tree : scipy.spatial.KDTree
+        A kd-tree constructed from the coordinates of the DES tiles
 
     Returns
     -------
-    tilename : str
-        Tilename that bounds the given sightline
+    indices : set
+        set of indices
     """
+    
+    MAX_DIST = 1.0657092338 # = 0.73 * sqrt(2) deg + 2 arcmin = ( 0.73 * sqrt(2) + .03333 ) deg
 
-    cond_1 = np.logical_and(sightline[0] > bounds[:,0], sightline[0] < bounds[:,1])
-    cond_2 = np.logical_and(sightline[1] > bounds[:,2], sightline[1] < bounds[:,3])
-    cond = np.logical_and(cond_1, cond_2)
-    matches = np.where(cond)[0]
+    matches = tree.query_ball_point(sightline, MAX_DIST)
+    print('got matches {} for sightline {}'.format(matches, sightline))
 
-    try:
-        assert(matches.shape == (1,))
-    except AssertionError:
-        if matches.shape != (0,):
-            pass
-            print('got matches {}'.format(matches))
-        else:
-            print('sightline {}\t'.format(sightline), end='')
-            #print('np.where(cond_1) = {}'.format(np.where(cond_1)))
-            #print('np.where(cond_2) = {}'.format(np.where(cond_2)))
-        return None
-    return matches[0]
+    return set(matches)
 
-def get_bounds():
-    """Get the bounds for all of the tiles of the DES
-    dataset.
-
+def get_coords():
+    """Get the coordinates for all of the DES tiles.
+    
     Returns
     -------
-    bounds : np.ndarray
-        NumPy ndarray of shape (3779, 4) where each row
-        is [ra_lowerbound, ra_upperbound, dec_lowerbound, dec_upperbound]
+    coords : np.ndarray
+        NumPy ndarray of shape (N, 2) where each row is a
+        tile coordinate (ra, dec) in units of degrees
     """
-
-    # sidelengths
-    SLENGTH = 0.73
-    SLENGTH_EFF = 2 * SLENGTH
-    # effective side length is because the coordinate label for a tile could lie
-    # anywhere within the tile, so the effective tile given a coordinate label is
-    # has twice the sidelength
-
+    
     global DES_LINKS_TXT
-    bounds = []
+    coords = []
 
     for link in urllib.request.urlopen(DES_LINKS_TXT):
         str_coord = link.decode('utf-8')[76:85]
@@ -96,12 +80,31 @@ def get_bounds():
         hourmin_ra, dec = str_coord[:4], int(str_coord[4:]) / 100
         ra = int(hourmin_ra[:2]) * 360 / 24 + int(hourmin_ra[2:]) * 360 / 1440
 
-        bound = [ra - SLENGTH_EFF / 2, ra + SLENGTH_EFF / 2, dec - SLENGTH_EFF / 2, dec + SLENGTH_EFF / 2]
-        bounds.append(bound)
-    bounds = np.array(bounds)
-    
-    return bounds
+        coord = [ra, dec]
+        coords.append(coord)
 
+    coords = np.array(coords)
+    return coords
+
+def indices2links(indices):
+    """Turn a list of indices/line numbers of the
+    plaintext DES file into their respective links.
+
+    Parameters
+    ----------
+    indices : list
+        list of indices
+
+    Returns
+    -------
+    links : list
+        List of links to FITS files
+    """
+
+    global DES_LINKS_TXT
+    return np.array([link.decode('utf-8')[:-1] for link in urllib.request.urlopen(DES_LINKS_TXT)])[indices]
+
+'''
 def tilenames2links(tilenames):
     """Convert a list of tilenames to their corresponding DES
     data links.
@@ -121,6 +124,7 @@ def tilenames2links(tilenames):
     suffix = '_y1a1_gold.fits'
     links = [prefix + tilename + suffix for tilename in tilenames]
     return links
+'''
 
 # commented out because not necessary for now
 '''

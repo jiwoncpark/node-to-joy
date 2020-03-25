@@ -22,7 +22,7 @@ def strip2RAdec(arr):
     """
     return np.array([[x[1], x[2]] for x in arr])
 
-def gen_sightlines(ra_bound=(60, 135), dec_bound=(-55, -45), root_k=50):
+def gen_sightlines(ra_bound=(10, 80), dec_bound=(-55, -45), root_k=50):
     """Generate a grid of sightlines. Each sightline is (ra, dec) in units
     of degrees.
 
