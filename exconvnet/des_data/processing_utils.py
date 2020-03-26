@@ -38,30 +38,6 @@ def strip2RAdec(arr):
     """
     return np.array([[x[1], x[2]] for x in arr])
 
-def gen_sightlines(ra_bound=(10, 15), dec_bound=(-55, -50), root_k=50):
-    """Generate a grid of sightlines. Each sightline is (ra, dec) in units
-    of degrees.
-
-    Parameters
-    ----------
-    ra_bound : tuple
-        Bounds on right ascension, in units of degrees
-    dec_bound : tuple
-        Bounds on declination, in units of degrees
-    root_k : int
-        Square root of k, the number of sightlines to generate
-
-    Returns
-    -------
-    sightlines : np.ndarray
-        A NumPy ndarray of shape (k, 2) where each row is a sightline.
-    """
-
-    ras = np.linspace(ra_bound[0], ra_bound[1], num=root_k)
-    decs = np.linspace(dec_bound[0], dec_bound[1], num=root_k)
-    sightlines = np.array(np.meshgrid(ras, decs)).T.reshape(-1, 2)
-
-    return sightlines
 
 def get_x_i(sightline, tree, arr, THRESHOLD=0.0333333333):
     """Given a sightline and raw DES array, get all
@@ -122,5 +98,3 @@ def compute_X(arr, sightlines):
 
     return X
 
-if __name__ == '__main__':
-    pass

@@ -1,9 +1,9 @@
 """Process downloaded data.
 """
 import numpy as np
-from .processing_utils import gen_labels, gen_sightlines, compute_X
+from .processing_utils import gen_labels, compute_X
 
-__all__ = ['process', 'strip2RAdec', 'gen_sightlines']
+__all__ = ['process', 'strip2RAdec']
 
 def process(arr, sightlines, autogen_y=True):
     """Process raw DES data into some training data for our models.

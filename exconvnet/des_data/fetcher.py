@@ -1,6 +1,6 @@
 from .downloader import download
-from .processing import process, gen_sightlines
-from .fetching_utils import sightlines2links
+from .processing import process
+from .fetching_utils import sightlines2links, gen_sightlines
 
 __all__ = ['fetch']
 

@@ -6,7 +6,31 @@ __all__ = ['sightlines2links']
 
 DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
 
-# FIX DEGREES HERE
+def gen_sightlines(ra_bound=(10, 15), dec_bound=(-55, -50), root_k=50):
+    """Generate a grid of sightlines. Each sightline is (ra, dec) in units
+    of degrees.
+
+    Parameters
+    ----------
+    ra_bound : tuple
+        Bounds on right ascension, in units of degrees
+    dec_bound : tuple
+        Bounds on declination, in units of degrees
+    root_k : int
+        Square root of k, the number of sightlines to generate
+
+    Returns
+    -------
+    sightlines : np.ndarray
+        A NumPy ndarray of shape (k, 2) where each row is a sightline.
+    """
+
+    ras = np.linspace(ra_bound[0], ra_bound[1], num=root_k)
+    decs = np.linspace(dec_bound[0], dec_bound[1], num=root_k)
+    sightlines = np.array(np.meshgrid(ras, decs)).T.reshape(-1, 2)
+
+    return sightlines
+
 def sightlines2links(sightlines):
     """Convert a grid of sightlines into a list of links to
     DES data.
@@ -32,7 +56,6 @@ def sightlines2links(sightlines):
         indices = indices.union(new_indices)
 
     indices = list(indices)
-    #print('got indices {}'.format(indices))
 
     return indices2links(indices)
 
@@ -43,20 +66,20 @@ def sightline2indices(sightline, tree):
     Parameters
     ----------
     sightline : np.ndarray
-        A NumPy array of shape (1, 2)
+        A NumPy array of shape (2,) that contains (ra, dec) in units
+        of degrees for a sightline
     tree : scipy.spatial.KDTree
         A kd-tree constructed from the coordinates of the DES tiles
 
     Returns
     -------
     indices : set
-        set of indices
+        set of indices/line numbers of the plaintext DES file containing
+        all of the links
     """
     
     MAX_DIST = 1.0657092338 # = 0.73 * sqrt(2) deg + 2 arcmin = ( 0.73 * sqrt(2) + .03333 ) deg
-
     matches = tree.query_ball_point(sightline, MAX_DIST)
-    #print('got matches {} for sightline {}'.format(matches, sightline))
 
     return set(matches)
 
@@ -103,90 +126,4 @@ def indices2links(indices):
 
     global DES_LINKS_TXT
     return np.array([link.decode('utf-8')[:-1] for link in urllib.request.urlopen(DES_LINKS_TXT)])[indices]
-
-'''
-def tilenames2links(tilenames):
-    """Convert a list of tilenames to their corresponding DES
-    data links.
-
-    Parameters
-    ----------
-    tilenames : list
-        list of tilenames (e.g. 'DES0001-4914') to use
-
-    Returns
-    -------
-    links : list
-        A list of links
-    """
-
-    prefix = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/'
-    suffix = '_y1a1_gold.fits'
-    links = [prefix + tilename + suffix for tilename in tilenames]
-    return links
-'''
-
-# commented out because not necessary for now
-'''
-class ToLinks():
-    def __init__(self, sightlines, indices, links, tilenames):
-        self.sightlines = sightlines
-        self.indices = indices
-        self.links = links
-        self.tilenames = tilenames
-        self.DES_LINKS_TXT = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/ALL_FILES.txt'
-    def to_links(self):
-        """Take user input (sightlines, indices, links, tilenames)
-        and just return the list of links that the user intended
-        to use. 
-
-        Parameters
-        ----------
-        sightlines : np.ndarray
-            A NumPy array of shape (k, 2) where each row is a sightline
-        indices : list
-            list of indices/line numbers of TXT file to use
-        links : list
-            list of links
-        tilenames : list
-            list of tilenames
-
-        Returns
-        -------
-        links : list
-            list of links to use
-        """
-
-        if len(self.links) != 0:
-            return self.links
-        elif len(self.tilenames) != 0:
-            links = _from_tilenames()
-            return links
-        elif len(self.indices) != 0:
-            links = _from_indices()
-            return links
-        else:
-            links = _from_sightlines()
-            return links
-
-
-    def _from_indices(self, indices=None):
-        """Convert a list of indices (line numbers of the plaintext
-        file containing links to DES data) to links.
-
-        Returns
-        -------
-        links : list
-            A list of links
-        """
-
-        if indices is None:
-            indices = self.indices
-        
-        links = []
-        for link in urllib.request.urlopen(self.DES_LINKS_TXT):
-            links.append(link.decode('utf-8')[:-1])
-        links = np.array(links)[self.indices]
-        return links
-'''
 

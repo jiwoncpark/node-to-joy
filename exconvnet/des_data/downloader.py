@@ -54,7 +54,8 @@ def download(links, verbose=False, delete_fits=True):
     return full_arr
 
 if __name__ == '__main__':
-    print('downloading from the first link on {}...'.format(DES_LINKS_TXT))
-    arr = download()
+    url = 'http://desdr-server.ncsa.illinois.edu/despublic/y1a1_files/gold_catalogs/DES0001-4914_y1a1_gold.fits'
+    print('downloading the following file: {}'.format(url))
+    arr = download([url])
     print('downloaded the following array')
     print(arr)
