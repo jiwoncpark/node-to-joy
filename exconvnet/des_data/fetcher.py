@@ -5,7 +5,7 @@ from .filter import DefaultFilter
 
 __all__ = ['fetch']
 
-def fetch(sightlines=None, cols=None, filters=None, verbose=True):
+def fetch(sightlines=None, cols=None, filters=None, gen_Y=True, verbose=True):
     """User-level method to do end-to-end fetching of DES data to
     inputs for train/val/test. Give a grid of k sightlines to return
     k examples, the columns you would like to keep, and the filters
@@ -17,6 +17,8 @@ def fetch(sightlines=None, cols=None, filters=None, verbose=True):
         List of columns to include; each element is a non-negative integer
     filters : list
         A list of names for filter functions to use (see filter.py for the filter function names)
+    gen_Y : bool
+        Should automatically generate the y-labels for X
     verbose : bool
         Verbosity
     
@@ -35,17 +37,27 @@ def fetch(sightlines=None, cols=None, filters=None, verbose=True):
     filter_obj = DefaultFilter(cols=cols, filters=filters)
     links = sightlines2links(sightlines)
 
+    if verbose:
+        print('Determined which data to download')
+
     # download the data
     arr = download(links, verbose=verbose)
 
     if verbose:
-        print('got arr of shape {}'.format(arr.shape))
+        print('downloaded arr of shape {}'.format(arr.shape))
 
     # process the data (turn into X and filter it)
     X = process_X(arr, sightlines, filter_obj)
+    
+    if verbose:
+        print('finished filtering and processing arr into X')
 
-    # create the Y here
-    Y = gen_labels(X)
+    if gen_Y:
+        # create the Y here
+        Y = gen_labels(X)
+
+        if verbose:
+            print('generated labels for X')
 
     return X, Y
 
