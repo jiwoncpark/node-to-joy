@@ -26,19 +26,14 @@ def downlink(downlink_dir, links, verbose=False):
 
     fits_files = []
     for i, link in enumerate(links):
-        if verbose:
-            print('downloading link #{}'.format(i))
         try:
             fits_files.append(download_file(link, cache=True))
         except Exception as e:
-            if verbose:
-                print('request to download {} returned exception {}'.format(link, e))
-                print('continuing with the next link')
             continue
     
     return fits_files
 
-def clear_folder(path, verbose=False):
+def clear_folder(path):
     """Clear out the contents of a folder.
 
     Parameters
@@ -55,6 +50,5 @@ def clear_folder(path, verbose=False):
             elif os.path.isdir(fpath):
                 shutil.rmtree(file_path)
         except Exception as e:
-            if verbose:
-                print('Failed to delete FITS file \'{}\'. Reason: {}'.format(fpath, e))
+            pass
 

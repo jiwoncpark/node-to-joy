@@ -6,21 +6,46 @@ from scipy.spatial import KDTree
 
 __all__ = ['gen_labels', 'strip2RAdec', 'gen_sightlines', 'compute_X']
 
-def gen_labels(arr):
-    """Generate y labels for given raw DES data by
+def gen_labels(X):
+    """Generate the y labels for all training
+    examples
+
+    Parameters
+    ----------
+    X : np.ndarray
+        The training set
+    
+    Returns
+    -------
+    Y : np.ndarray
+        The y labels for the training set
+    """
+    
+    Y = np.array([ylabel(x) for x in X])
+    return Y
+
+def ylabel(x, IDX=39):
+    """Generate y label for a training example by
     getting the mean magnitude of the objects and dividing
     it by 1000.
 
     Parameters
     ----------
-    arr : np.ndarray
+    x : np.ndarray
         Numpy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
+    IDX : int
+        A non-negative integer referring to the quantity to be averaged
 
     Returns
     -------
-    arr : np.ndarray
+    y : float
+        The label for the training example
     """
-    return np.mean([obj[39] for obj in arr]) / 1000
+
+    IDX = 39  # MAG_AUTO_G
+
+    y = np.mean([obj[IDX] for obj in x]) / 1000
+    return y
 
 def strip2RAdec(arr):
     """Strip the raw DES data into a set of (ra, dec) coordinates
@@ -68,7 +93,7 @@ def get_x_i(sightline, tree, arr, THRESHOLD=0.0333333333):
     # order by distance from LOS
     x_i = sorted(x_i, key=lambda x: np.linalg.norm(np.array(x[1] - sightline[0], x[2] - sightline[1])))
 
-    return x_i
+    return np.array(x_i)
 
 
 def compute_X(arr, sightlines):
@@ -82,9 +107,9 @@ def compute_X(arr, sightlines):
 
     Returns
     -------
-    LOS : np.ndarray
-        A NumPy ndarray of shape (k,) where each element is a list of galaxies
-        within a radius of 2 arcminutes of the LOS
+    X : np.ndarray
+        A NumPy ndarray of shape (k,) where each element is a np.ndarray
+        of galaxies within a radius of 2 arcminutes of the LOS
     """
 
     k = sightlines.shape[0]

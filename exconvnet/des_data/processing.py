@@ -3,10 +3,10 @@
 import numpy as np
 from .processing_utils import gen_labels, compute_X
 
-__all__ = ['process', 'strip2RAdec']
+__all__ = ['gen_labels', 'process_X']
 
-def process(arr, sightlines, autogen_y=True):
-    """Process raw DES data into some training data for our models.
+def process_X(arr, sightlines, filter_obj):
+    """Process raw DES data into some training X data for our models.
 
     Parameters
     ----------
@@ -14,20 +14,24 @@ def process(arr, sightlines, autogen_y=True):
         NumPy ndarray of shape (N,) where each entry corresponds to a star/galaxy from DES data
     sightlines : np.ndarray
         NumPy ndarray where each row is a coordinate of a LOS
-    autogen_y : bool
-        Should automatically generate y in some deterministic way?
+    filter_obj : Filter
+        Filter object that filters out X
 
     Returns
     -------
-    arr : np.ndarray
+    X : np.ndarray
+        A NumPy ndarray of shape (k,) where each element is a np.ndarray
+        of galaxies within a radius of 2 arcminutes of the LOS
     """
 
     # compute the training examples that we could do from arr
     X = compute_X(arr, sightlines)
 
-    # for now we'll generate y-labels
-    Y = gen_labels(arr)
-    return (X, Y)
+    # filter X
+    X = filter_obj.filter_set(X)
+    X = filter_obj.trim_cols(X)
+
+    return X
 
 if __name__ == '__main__':
     from .downloader import download
