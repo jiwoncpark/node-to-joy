@@ -1,2 +1,2 @@
 # init
-from xy_data import XYData, XData
+from .xy_data import ExConvDataset, ExConvTestSet

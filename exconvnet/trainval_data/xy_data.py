@@ -17,6 +17,9 @@ class ExConvDataset(Dataset):
         y_path : str
             path to the .npy file containing Y
         """
+
+        self.__dict__ = data_cfg
+
         # get X and Y loaded
         self.X = np.load(x_path, allow_pickle=True)
         self.Y = np.load(y_path, allow_pickle=True)
@@ -25,9 +28,9 @@ class ExConvDataset(Dataset):
     def __len__(self):
         return self.n_data
     def __getitem__(self, idx):
-        return torch.FloatTensor(self.X[idx]), torch.FloatTensor(self.Y[idx])
+        return torch.FloatTensor(self.X[idx]), torch.FloatTensor([self.Y[idx]])
 
-class ExConvTestSet(dataset):
+class ExConvTestSet(Dataset):
     """Represents the XData used to test our models
 
     """
