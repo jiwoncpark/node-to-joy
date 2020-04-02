@@ -108,7 +108,7 @@ def main():
 
     # Instantiate optimizer
     optimizer = optim.Adam(net.parameters(), lr=cfg.optim.learning_rate, amsgrad=False, weight_decay=cfg.optim.weight_decay)
-    #lr_scheduler = optim.lr_scheduler.ReducedLROnPlateau(optimizer, mode='min', factor=cfg.optim.lr_scheduler.factor, patience=cfg.optim.lr_scheduler.patience, verbose=True)
+    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=cfg.optim.lr_scheduler.factor, patience=cfg.optim.lr_scheduler.patience, verbose=True)
 
     # Saving/loading state dicts
     checkpoint_dir = cfg.checkpoint.save_dir
@@ -142,6 +142,11 @@ def main():
             X_tr = X_tr.to(device)
             Y_tr = Y_tr.to(device)
             # Update weights
+
+            # for debugging
+            X_tr = X_tr[0,0].unsqueeze(0).unsqueeze(0)
+            Y_tr = torch.Tensor([[0]])
+
             optimizer.zero_grad()
             pred_tr = net(X_tr)
             loss = loss_fn(pred_tr, Y_tr)
@@ -159,13 +164,12 @@ def main():
             val_loss = 0.0
             test_loss = 0.0
 
-            if cfg.data.test_dir is not None:
-                for batch_idx, (X_t, Y_t) in enumerate(test_loader):
-                    X_t = X_t.to(device)
-                    Y_t = Y_t.to(device)
-                    pred_t = net(X_t)
-                    nograd_loss_t = loss_fn(pred_t, Y_t)
-                    test_loss += (nograd_loss_t.item() - test_loss)/(1 + batch_idx)
+            for batch_idx, (X_t, Y_t) in enumerate(test_loader):
+                X_t = X_t.to(device)
+                Y_t = Y_t.to(device)
+                pred_t = net(X_t)
+                nograd_loss_t = loss_fn(pred_t, Y_t)
+                test_loss += (nograd_loss_t.item() - test_loss)/(1 + batch_idx)
 
             for batch_idx, (X_v, Y_v) in enumerate(val_loader):
                 X_v = X_v.to(device)
@@ -176,10 +180,9 @@ def main():
 
             tqdm.write("Epoch [{}/{}]: TRAIN Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, train_loss))
             tqdm.write("Epoch [{}/{}]: VALID Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, val_loss))
-            if cfg.data.test_dir is not None:
-                tqdm.write("Epoch [{}/{}]: TEST Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, test_loss))
+            tqdm.write("Epoch [{}/{}]: TEST Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, test_loss))
             
-            if (epoch + 1)%(cfg.monitoring.interval) == 0:
+            if (epoch + 1) % cfg.monitoring.interval == 0:
                 # Subset of validation for plotting
                 n_plotting = cfg.monitoring.n_plotting
                 X_plt = X_v[:n_plotting].cpu().numpy()
@@ -236,7 +239,7 @@ def main():
                         fig = train_utils.get_1d_mapping_fig(param_name, mu_orig[:, param_idx], Y_plt_orig[:, param_idx])
                         logger.add_figure(tag, fig, global_step=epoch)
 
-            if (epoch + 1)%(cfg.checkpoint.interval) == 0:
+            if (epoch + 1) % cfg.checkpoint.interval == 0:
                 # FIXME compare to last saved epoch val loss
                 if val_loss < last_saved_val_loss:
                     os.remove(model_path) if os.path.exists(model_path) else None
@@ -245,7 +248,7 @@ def main():
         '''
 
         # Step lr_scheduler every epoch
-        #lr_scheduler.step(val_loss)
+        lr_scheduler.step(train_loss)
 
     #logger.close()
     # Save final state dict

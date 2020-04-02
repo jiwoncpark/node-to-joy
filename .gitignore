@@ -8,6 +8,8 @@
 *.hdf5
 *.png
 *.fits
+*.json
+*.swp
 
 # HTML builds
 docs/_build/*
