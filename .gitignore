@@ -9,7 +9,6 @@
 *.png
 *.fits
 *.json
-*.swp
 
 # HTML builds
 docs/_build/*
@@ -34,3 +33,5 @@ docs/_build/*
 *Untitled.ipynb
 *~
 *#
+*.swp
+debug.py
