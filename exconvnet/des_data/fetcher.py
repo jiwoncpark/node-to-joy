@@ -2,10 +2,6 @@ import time
 import numpy as np
 import os
 
-from .downloader import download
-from .processing import process_X, gen_labels
-from .fetching_utils import sightlines2links, gen_sightlines
-from .filter import DefaultFilter
 
 __all__ = ['fetch']
 
@@ -15,6 +11,8 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
     k examples, the columns you would like to keep, and the filters
     to use. Automatically saves the datasets to a `datasets` folder.
 
+    Parameters
+    ----------
     sightlines : np.ndarray
         A (k, 2) array where each row is a sightline
     cols : list
@@ -40,6 +38,11 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
     META : np.ndarray
         Metadata array containing means and stds for X
     """
+
+    from .downloader import download
+    from .processing import process_X, gen_labels
+    from .fetching_utils import sightlines2links, gen_sightlines
+    from .filter import DefaultFilter
 
     # interpret the user inputs
     if sightlines is None:
@@ -99,7 +102,7 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
         np.save(os.path.join(save_path, y_fname), Y)  # save generated training labels
 
     metadata_fname = tag + '_metadata.npy'
-    np.save(os.path.join(save_path, metadata_fname, META))  # save metadata about X
+    np.save(os.path.join(save_path, metadata_fname), META)  # save metadata about X
 
     return X, Y, META
 

@@ -4,7 +4,9 @@
 import numpy as np
 from scipy.spatial import KDTree
 
-__all__ = ['gen_labels', 'strip2RAdec', 'gen_sightlines', 'compute_X']
+__all__ = ['gen_labels', 'strip2RAdec',
+           'gen_sightlines', 'compute_X',
+           'compute_metadata', 'standardize']
 
 def standardize(X, META):
     """Standardize X given its means and stds.

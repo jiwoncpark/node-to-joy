@@ -1,7 +1,7 @@
 """Process downloaded data.
 """
 import numpy as np
-from .processing_utils import gen_labels, compute_X
+from .processing_utils import gen_labels, compute_X, compute_metadata, standardize
 
 __all__ = ['gen_labels', 'process_X']
 
