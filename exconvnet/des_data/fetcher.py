@@ -22,7 +22,8 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
     filters : list
         A list of names for filter functions to use (see filter.py for the filter function names)
     save_path : str
-        path to save the fetched dataset to
+        path to save the fetched dataset to. If not provided, automatically saves to
+        datasets directory.
     gen_Y : bool
         Should automatically generate the y-labels for X
     verbose : bool
@@ -43,11 +44,16 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
     # interpret the user inputs
     if sightlines is None:
         sightlines = gen_sightlines()
-    if save_path is None:
+    if save_path is None:  # save automatically to the datasets folder
         exconvnet_dir = os.path.split(os.path.split(os.path.realpath(__file__))[0])[0]
         save_path = os.path.join(exconvnet_dir, 'datasets')
 
+    # initialize a filter object that will later be useful
+    # to preprocess the training data
     filter_obj = DefaultFilter(cols=cols, filters=filters)
+
+    # this function determines the online links to use to download
+    # the provided (or generated) sightlines
     links = sightlines2links(sightlines)
 
     if verbose:

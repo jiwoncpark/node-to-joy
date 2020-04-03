@@ -1,6 +1,5 @@
 """Training various models.
 This script trains a model according to the config specifications.
-
 Example
 -------
 To run this script, pass in the path to the user-defined training config file as the argument::
