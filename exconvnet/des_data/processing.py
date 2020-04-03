@@ -22,6 +22,8 @@ def process_X(arr, sightlines, filter_obj):
     X : np.ndarray
         A NumPy ndarray of shape (k,) where each element is a np.ndarray
         of galaxies within a radius of 2 arcminutes of the LOS
+    META : np.ndarray
+        Metadata array containing means and stds for X
     """
 
     # compute the training examples that we could do from arr
@@ -31,7 +33,10 @@ def process_X(arr, sightlines, filter_obj):
     X = filter_obj.filter_set(X)
     X = filter_obj.trim_cols(X)
 
-    return X
+    # compute metadata
+    META = compute_metadata(X)
+
+    return X, META
 
 if __name__ == '__main__':
     from .downloader import download

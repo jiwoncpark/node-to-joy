@@ -6,6 +6,29 @@ from scipy.spatial import KDTree
 
 __all__ = ['gen_labels', 'strip2RAdec', 'gen_sightlines', 'compute_X']
 
+def compute_metadata(X):
+    """Computes metadata, which includes 59 x 2 floats
+    for mean and std for each of the 59 features.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        The training set
+
+    Returns
+    -------
+    META : np.ndarray
+        (59, 2) metadata array
+    """
+
+    flat = np.concatenate([x for x in X])
+
+    means = np.mean(flat, axis=0)
+    stds = np.std(flat, axis=0)
+    META = np.stack((means, stds))
+
+    return META
+
 def gen_labels(X):
     """Generate the y labels for all training
     examples

@@ -34,7 +34,10 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
         A NumPy ndarray that contains the observed measurements for each galaxy
     Y : np.ndarray
         A NumPy ndarray that contains the predicted kappa_ext (or some other variable with
-        a functional relationship with X, given that we do not have kappa_ext available)
+        a functional relationship with X, given that we do not have kappa_ext available). None
+        if gen_Y is False.
+    META : np.ndarray
+        Metadata array containing means and stds for X
     """
 
     # interpret the user inputs
@@ -57,7 +60,7 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
         print('downloaded arr of shape {}'.format(arr.shape))
 
     # process the data (turn into X and filter it)
-    X = process_X(arr, sightlines, filter_obj)
+    X, META = process_X(arr, sightlines, filter_obj)
     
     if verbose:
         print('finished filtering and processing arr into X')
@@ -68,18 +71,26 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
 
         if verbose:
             print('generated labels for X')
+    else:
+        Y = None
 
-    # pickle/save them
+    # pickle/save them now
     if not(os.path.exists(save_path)):
         os.mkdir(save_path)
 
-    tag = str(round(time.time()))
-    x_fname = tag + '_X.npy'
-    y_fname = tag + '_Y.npy'
-    np.save(os.path.join(save_path, x_fname), X)
-    np.save(os.path.join(save_path, y_fname), Y)
+    tag = str(round(time.time()))  # this will be the identifier for a dataset
 
-    return X, Y
+    x_fname = tag + '_X.npy'
+    np.save(os.path.join(save_path, x_fname), X)  # save training input set
+
+    if gen_Y:
+        y_fname = tag + '_Y.npy'
+        np.save(os.path.join(save_path, y_fname), Y)  # save generated training labels
+
+    metadata_fname = tag + '_metadata.npy'
+    np.save(os.path.join(save_path, metadata_fname, META))  # save metadata about X
+
+    return X, Y, META
 
 if __name__ == '__main__':
     import time
