@@ -77,8 +77,7 @@ class TrainValConfig:
         """
         # Y metadata
         self.data.Y_dim = len(self.data.Y_cols)
-        # Get training-set mean and std for whitening
-        train_metadata_path = os.path.join(self.data.train_dir, 'metadata.csv')
+
         # Data to plot during monitoring
         if self.monitoring.n_plotting > 100:
             warnings.warn("Only plotting allowed max of 100 datapoints during training")
