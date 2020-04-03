@@ -4,68 +4,35 @@ import torch.nn as nn
 __all__ = ['RNN']
 
 class RNN(nn.Module):
-    def __init__(self, input_size, num_classes, hidden_size=5):
-        super(RNN, self).__init__()
+    def __init__(self, input_size, hidden_size=5, num_layers=1):
+        super().__init__()
 
-        self.hidden_size = hidden_size
+        # takes last hidden state and transforms it into R, should
+        # be point estimate
+        self.last_layer = nn.Linear(hidden_size, 1)
 
-        self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2o = nn.Linear(input_size + hidden_size, num_classes)
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
 
-    def _forward_once(self, x, h, compute_out=False):
-        """Compute a single step of the RNN forward pass.
+    def forward(self, X):
+        """Do a forward pass on a packed padded sequence mini-batch.
 
         Parameters
         ----------
-        x : torch.FloatTensor
-            input example
-        h : torch.FloatTensor
-            the hidden state from the previous timestep
-        compute_out : bool
-            whether to compute the output
+        X : torch.nn.utils.rnn.PackedSequence
+            Packed sequence input
 
         Returns
         -------
-        output : torch.Tensor
-            the output point estimate of shape (1,1)
-        hidden : torch.Tensor
-            the next hidden state
+        Y : torch.Tensor
+            output tensor containing n real numbers if batch size is n
         """
 
-        combined = torch.cat((x, h))
-        hidden = self.i2h(combined)
+        # expecting X to be packed padded sequence
+        _, hn = self.rnn(X)  # we ignore first output because it contains all hidden states
 
-        if compute_out:
-            output = self.i2o(combined)
-        else:
-            output = None
+        # now that hn is the hidden layer at timestep n,
+        # we can compute the posterior conditioned on our
+        # sequence, which is encoded by hn
+        Y = self.last_layer(hn)
+        return Y
 
-        return output, hidden
-
-    def forward(self, X):
-        # TODO figure out some way to do this
-        # in a more efficient/parallel way
-
-        out = torch.empty(X.shape[0])
-        for i, x in enumerate(X):
-            h = self.init_hidden()
-            
-            if x.shape[0] != 1:
-                for x_i in x[:-1]:
-                    _, h = self._forward_once(x_i, h)
-
-            out[i] = self._forward_once(x[-1], h, compute_out=True)[0]
-
-        return out
-
-    def init_hidden(self):
-        """Initialize the hidden state.
-
-        Returns
-        -------
-        hidden : torch.Tensor
-            the first hidden state
-        """
-        
-        hidden = torch.zeros(self.hidden_size)
-        return hidden
