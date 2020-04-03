@@ -6,6 +6,53 @@ from scipy.spatial import KDTree
 
 __all__ = ['gen_labels', 'strip2RAdec', 'gen_sightlines', 'compute_X']
 
+def standardize(X, META):
+    """Standardize X given its means and stds.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        The training set
+    META : np.ndarray
+        (59, 2) metadata array
+    
+    Returns
+    -------
+    X : np.ndarray
+        The standardized training set
+    """
+
+    means, stds = META
+
+    X = np.array([standardize_example(x, means, stds) for x in X])
+
+    return X
+
+def standardize_example(x, means, stds):
+    """Standardize a specific example.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        An example of shape (n, k) where n is the number of galaxies/stars
+        and k is the number of columns used
+    means : np.ndarray
+        Mean for each column
+    stds: np.ndarray
+        STD for each column
+
+    Returns
+    -------
+    x : np.ndarray
+        The standardized example (i.e. for each element of x, x_new := (x - mean) / std)
+    """
+
+    demeaned = x - np.tile(means, reps=(x.shape[0], 1))
+    x = np.divide(demeaned, np.tile(stds, reps=(demeaned.shape[0], 1)))
+
+    return x
+
+
 def compute_metadata(X):
     """Computes metadata, which includes 59 x 2 floats
     for mean and std for each of the 59 features.

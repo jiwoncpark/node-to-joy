@@ -33,8 +33,11 @@ def process_X(arr, sightlines, filter_obj):
     X = filter_obj.filter_set(X)
     X = filter_obj.trim_cols(X)
 
-    # compute metadata
+    # compute metadata (means and stds)
     META = compute_metadata(X)
+
+    # standardize X using META
+    X = standardize(X, META)
 
     return X, META
 
