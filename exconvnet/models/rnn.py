@@ -30,6 +30,10 @@ class RNN(nn.Module):
         # expecting X to be packed padded sequence
         _, hn = self.rnn(X)  # we ignore first output because it contains all hidden states
 
+        # we only care about the last hidden layer, since
+        # hn is of shape (num_layers, batch, hidden_size)
+        hn = hn[-1]
+
         # now that hn is the hidden layer at timestep n,
         # we can compute the posterior conditioned on our
         # sequence, which is encoded by hn
