@@ -80,7 +80,7 @@ def compute_metadata(X):
 
 def gen_labels(X):
     """Generate the y labels for all training
-    examples
+    examples given un-standardized X.
 
     Parameters
     ----------

@@ -72,20 +72,10 @@ def fetch(sightlines=None, cols=None, filters=None, save_path=None, gen_Y=True, 
     # 1. turn the flat arr + sightlines into X, which is in training data format
     # 2. filter out unnecessary columns or unwanted astronomical objects
     # 3. generate means and STDs, and standardize X based on that
-    X, META = process_X(arr, sightlines, filter_obj)
+    X, Y, META = process_X(arr, sightlines, filter_obj, gen_Y)
     
     if verbose:
         print('finished filtering and processing arr into X')
-    
-    # If Y is not obtained through some other means,
-    # generate dummy Y here.
-    if gen_Y:  
-        Y = gen_labels(X)
-
-        if verbose:
-            print('generated labels for X')
-    else:
-        Y = None
 
     # Serialize all of the data now and save it
     # to save_path

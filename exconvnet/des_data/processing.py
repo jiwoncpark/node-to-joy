@@ -5,7 +5,7 @@ from .processing_utils import gen_labels, compute_X, compute_metadata, standardi
 
 __all__ = ['gen_labels', 'process_X']
 
-def process_X(arr, sightlines, filter_obj):
+def process_X(arr, sightlines, filter_obj, gen_Y):
     """Process raw DES data into some training X data for our models.
 
     Parameters
@@ -16,12 +16,19 @@ def process_X(arr, sightlines, filter_obj):
         NumPy ndarray where each row is a coordinate of a LOS
     filter_obj : Filter
         Filter object that filters out X
+    gen_Y : bool
+        Should automatically generate the y-labels for X
 
     Returns
     -------
     X : np.ndarray
         A NumPy ndarray of shape (k,) where each element is a np.ndarray
         of galaxies within a radius of 2 arcminutes of the LOS
+    Y : np.ndarray
+        A NumPy ndarray that contains the predicted kappa_ext (or some other variable with
+        a functional relationship with X, given that we do not have kappa_ext available). None
+        if gen_Y is False.
+        
     META : np.ndarray
         Metadata array containing means and stds for X
     """
@@ -33,13 +40,19 @@ def process_X(arr, sightlines, filter_obj):
     X = filter_obj.filter_set(X)
     X = filter_obj.trim_cols(X)
 
+    # compute dummy Y automatically if necessary
+    if gen_Y:
+        Y = gen_labels(X)
+    else:
+        Y = None
+
     # compute metadata (means and stds)
     META = compute_metadata(X)
 
     # standardize X using META
     X = standardize(X, META)
 
-    return X, META
+    return X, Y, META
 
 if __name__ == '__main__':
     from .downloader import download
