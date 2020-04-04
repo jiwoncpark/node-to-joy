@@ -12,7 +12,7 @@ import os, sys
 import random
 import argparse
 from addict import Dict
-import numpy as np # linear algebra
+import numpy as np
 from tqdm import tqdm
 # torch modules
 import torch
@@ -20,7 +20,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 # exconvnet modules (turn this into relative later)
-from trainval_data import ExConvDataset
+import trainval_data
 from configs import TrainValConfig
 import losses
 import models
@@ -71,7 +71,7 @@ def main():
 
     # Define training data and loader
     torch.multiprocessing.set_start_method('spawn', force=True)
-    dataset = ExConvDataset(x_path=cfg.data.x_path, y_path=cfg.data.y_path, data_cfg=cfg.data)
+    dataset = trainval_data.ExConvDataset(x_path=cfg.data.x_path, y_path=cfg.data.y_path, data_cfg=cfg.data)
 
     # split up the dataset
     train, val = (len(dataset) * np.array(cfg.data.split)[:-1]).astype('int')
@@ -80,13 +80,22 @@ def main():
     trainset, valset, testset = torch.utils.data.random_split(dataset, [train, val, test])
 
     # set up data loaders
-    train_loader = DataLoader(trainset, batch_size=cfg.optim.batch_size, shuffle=True, drop_last=True, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(trainset, batch_size=cfg.optim.batch_size,
+                              shuffle=True, drop_last=True, num_workers=4,
+                              pin_memory=True, collate_fn=getattr(trainval_data, cfg.model.collator))
+
     n_train = len(trainset) - (len(trainset) % cfg.optim.batch_size)
 
-    val_loader = DataLoader(valset, batch_size=cfg.optim.batch_size, shuffle=False, drop_last=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(valset, batch_size=cfg.optim.batch_size,
+                            shuffle=False, drop_last=True, num_workers=4,
+                            pin_memory=True, collate_fn=getattr(trainval_data, cfg.model.collator))
+
     n_val = len(valset) - (len(valset) % cfg.optim.batch_size)
 
-    test_loader = DataLoader(testset, batch_size=cfg.optim.batch_size, shuffle=False, drop_last=True, num_workers=4, pin_memory=True)
+    test_loader = DataLoader(testset, batch_size=cfg.optim.batch_size,
+                             shuffle=False, drop_last=True, num_workers=4,
+                             pin_memory=True, collate_fn=getattr(trainval_data, cfg.model.collator))
+
     n_test = len(testset) - (len(testset) % cfg.optim.batch_size)
 
     #########
@@ -98,7 +107,7 @@ def main():
     # Instantiate posterior (for logging)
     #post = getattr(inference.posterior, loss_fn.posterior_name)(val_data.Y_dim, device, valset.train_Y_mean, valset.train_Y_std)
     # Instantiate model
-    net = getattr(models, cfg.model.architecture)(input_size=59, num_classes=1)
+    net = getattr(models, cfg.model.architecture)(input_size=59)
     net.to(device)
 
     ################
@@ -143,8 +152,8 @@ def main():
             # Update weights
 
             # for debugging
-            X_tr = X_tr[0,0].unsqueeze(0).unsqueeze(0)
-            Y_tr = torch.Tensor([[0]])
+            #X_tr = X_tr[0,0].unsqueeze(0).unsqueeze(0)
+            #Y_tr = torch.Tensor([[0]])
 
             optimizer.zero_grad()
             pred_tr = net(X_tr)
@@ -156,7 +165,6 @@ def main():
 
         print('training loss: {:.3g}'.format(train_loss))
 
-        '''
         with torch.no_grad():
             net.eval()
             #net.apply(h0rton.models.deactivate_batchnorm)
@@ -181,6 +189,7 @@ def main():
             tqdm.write("Epoch [{}/{}]: VALID Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, val_loss))
             tqdm.write("Epoch [{}/{}]: TEST Loss: {:.4f}".format(epoch+1, cfg.optim.n_epochs, test_loss))
             
+            '''
             if (epoch + 1) % cfg.monitoring.interval == 0:
                 # Subset of validation for plotting
                 n_plotting = cfg.monitoring.n_plotting
