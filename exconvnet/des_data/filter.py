@@ -22,7 +22,7 @@ class BaseFilter():
     
     def __init__(self, cols=None, filters=None):
         """Init Filter here"""
-        exclude = ['trim_cols',
+        exclude = ['remove_cols',
                    'check_example',
                    'filter_example',
                    'filter_set']
@@ -43,7 +43,7 @@ class BaseFilter():
         else:
             self.filters = filters
 
-    def trim_cols(self, X):
+    def remove_cols(self, X):
         """Trim extra columns and include only the ones
         provided in the input.
 

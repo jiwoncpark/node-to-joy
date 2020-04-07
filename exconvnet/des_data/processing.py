@@ -38,7 +38,7 @@ def process_X(arr, sightlines, filter_obj, gen_Y):
 
     # filter X
     X = filter_obj.filter_set(X)
-    X = filter_obj.trim_cols(X)
+    X = filter_obj.remove_cols(X)
 
     # compute dummy Y automatically if necessary
     if gen_Y:
