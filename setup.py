@@ -19,6 +19,9 @@ setup(
       url='https://github.com/jiwoncpark/ex-con',
       #install_requires=required_packages,
       #dependency_links=['http://github.com/jiwoncpark/corner.py/tarball/master#egg=corner_jiwoncpark'],
+      entry_points={
+        'console_scripts': ['train=exconvnet.train:main', 'infer=exconvnet.infer:main'],
+      }
       include_package_data=True,
       test_suite='nose.collector',
       tests_require=['nose'],

@@ -7,7 +7,8 @@
 *.h5
 *.hdf5
 *.png
-exconvnet/des_data/*
+*.fits
+*.json
 
 # HTML builds
 docs/_build/*
@@ -32,3 +33,5 @@ docs/_build/*
 *Untitled.ipynb
 *~
 *#
+*.swp
+debug.py
