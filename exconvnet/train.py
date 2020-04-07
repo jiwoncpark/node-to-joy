@@ -136,8 +136,8 @@ def main():
     model_path = ''
     print("Training set size: {:d}".format(n_train))
     print("Validation set size: {:d}".format(n_val))
-    if cfg.data.test_dir is not None:
-        print("Test set size: {:d}".format(n_test))
+    print("Test set size: {:d}".format(n_test))
+    print('Using device {}'.format(device))
     progress = tqdm(range(epoch, cfg.optim.n_epochs))
     for epoch in progress:
         print('epoch {}'.format(epoch + 1))
@@ -150,11 +150,6 @@ def main():
             X_tr = X_tr.to(device)
             Y_tr = Y_tr.to(device)
             # Update weights
-
-            # for debugging
-            #X_tr = X_tr[0,0].unsqueeze(0).unsqueeze(0)
-            #Y_tr = torch.Tensor([[0]])
-
             optimizer.zero_grad()
             pred_tr = net(X_tr)
             loss = loss_fn(pred_tr, Y_tr)
@@ -256,7 +251,7 @@ def main():
         '''
 
         # Step lr_scheduler every epoch
-        lr_scheduler.step(train_loss)
+        lr_scheduler.step(val_loss)
 
     #logger.close()
     # Save final state dict

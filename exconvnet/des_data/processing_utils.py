@@ -116,7 +116,7 @@ def ylabel(x, IDX=39):
 
     IDX = 39  # MAG_AUTO_G
 
-    y = np.mean([obj[IDX] for obj in x]) / 1000
+    y = np.mean([obj[IDX] for obj in x]) * 30
     return y
 
 def strip2RAdec(arr):
