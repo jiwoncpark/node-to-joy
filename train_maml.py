@@ -53,18 +53,18 @@ from torch.utils.data.sampler import SubsetRandomSampler
 def main():
     # n_way, k_spt, k_qry, task_num, seed
 
-    #seed = 1234
-    #torch.manual_seed(seed)
-    #if torch.cuda.is_available():
-    #    torch.cuda.manual_seed_all(seed)
-    #np.random.seed(seed)
+    seed = 12345
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
     device = torch.device('cuda')
 
     train_dataset = CosmoDC2(
                              root='/home/jwp/stage/sl/extranet/data/cosmodc2_train',
                              healpix_pixels=[10450], 
                              aperture_size=3.0, # raytracing res (0.85') x FoV factor (15) = 12.75'
-                             n_data=1000,
+                             n_data=10000,
                              random_seed=1234
                              )  
     val_dataset = CosmoDC2(
@@ -79,8 +79,8 @@ def main():
     print("Number of validation examples: ", val_dataset.n_v0_hp)
     batch_size = 1
 
-    train_support_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(800).tolist()))
-    train_query_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(800, 1000).tolist()))
+    train_support_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(8000).tolist()))
+    train_query_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(8000, 10000).tolist()))
     val_support_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(800).tolist()))
     val_query_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=0, drop_last=True, sampler=SubsetRandomSampler(np.arange(800, 1000).tolist()))
 
@@ -97,7 +97,7 @@ def main():
     model = model.to(device)
     meta_optimizer = torch.optim.Adam(model.parameters(), lr=5.e-4, weight_decay=1e-5)
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(meta_optimizer, mode='min', factor=0.5, patience=10, cooldown=10, min_lr=1e-7, verbose=True)
-    n_epochs = 10
+    n_epochs = 1000
     for epoch in tqdm(range(n_epochs)):
         train_log = train(train_support_loader, train_query_loader, model, device, meta_optimizer, epoch)
         val_log = test(val_support_loader, val_query_loader, model, device, epoch)
@@ -157,7 +157,13 @@ def train(support_loader, query_loader, model, device, meta_opt, epoch):
                 loss_q.backward()
                 n_iter += 1
                 total_query_loss += (loss_q.detach().item() - total_query_loss)/(1 + n_iter)
-
+        
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': meta_opt.state_dict(),
+            'loss': total_query_loss,
+            }, 'trained_model_maml.pt')
         meta_opt.step()
 
     log = {
@@ -191,7 +197,7 @@ def test(support_loader, query_loader, model, device, epoch):
         # Initialize the inner optimizer to adapt the parameters to
         # the support set.
         n_inner_iter = 5
-        inner_opt = torch.optim.SGD(model.parameters(), lr=1e-1)
+        inner_opt = torch.optim.SGD(model.parameters(), lr=1e-5)
 
         losses_q = []
         for i in range(task_num):

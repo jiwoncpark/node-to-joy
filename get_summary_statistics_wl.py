@@ -8,12 +8,14 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 parser.add_argument('aperture_size', type=float, #nargs='+',
                     help='size of aperture in arcmin')
+parser.add_argument('healpix', type=int, #nargs='+',
+                    help='healpix ID')
 args = parser.parse_args()
 #cols = [galaxy_id, position_angle_true, redshift_true, mag_u_lsst, shear_2, ra, shear_2_treecorr, mag_Y_lsst, dec, mag_i_lsst, size_true, mag_g_lsst, mag_r_lsst, redshift, ellipticity_true, convergence, mag_z_lsst, shear_2_phosim, shear_1]
 start = time.time()
-print("Filename: los_{0:.4g}arcmin.csv".format(args.aperture_size))
+#print("Filename: los_{0:.4g}arcmin_{:d}.csv".format(args.aperture_size, args.healpix))
 
-cosmodc2 = pd.read_csv('cosmodc2_trainval.csv', index_col=None)
+cosmodc2 = pd.read_csv('data/cosmodc2/raw/cosmodc2_trainval_{:d}.csv'.format(args.healpix), index_col=None, nrows=50000)
 N, n_features = cosmodc2.shape
 print("Read in cosmodc2 with {:d} objects".format(N))
 
