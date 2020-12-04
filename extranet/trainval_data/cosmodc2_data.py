@@ -27,7 +27,7 @@ class CosmoDC2(Dataset):
     """Set of graphs representing a subset or all of the CosmoDC2 field
 
     """
-
+    # 17 vs. 131
     # https://github.com/LSSTDESC/gcr-catalogs/blob/master/GCRCatalogs/catalog_configs/cosmoDC2_v1.1.4_small.yaml
     #healpix_available = [9559,  9686,  9687,  9814,  9815,  9816,  9942,  9943, 10070, 10071, 10072, 10198, 10199, 10200, 10326, 10327, 10450] # small_v1.14
     # https://github.com/LSSTDESC/gcr-catalogs/blob/master/GCRCatalogs/catalog_configs/cosmoDC2_v1.1.4_image.yaml

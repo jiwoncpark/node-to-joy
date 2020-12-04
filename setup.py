@@ -7,16 +7,16 @@ from setuptools import setup, find_packages
 #print(required_packages)
 
 setup(
-      name='exconvnet',
-      version='0.1',
+      name='extranet',
+      version='v0.10',
       author='Ji Won Park, Rodrigo Castellon',
       author_email='jiwon.christine.park@gmail.com, rjcaste@stanford.edu',
       packages=find_packages(),
       license='LICENSE.md',
-      description='Methods for inference of External convergence',
+      description='Methods for inference of external convergence',
       long_description=open("README.rst").read(),
       long_description_content_type='text/markdown',
-      url='https://github.com/jiwoncpark/ex-con',
+      url='https://github.com/jiwoncpark/extranet',
       #install_requires=required_packages,
       #dependency_links=['http://github.com/jiwoncpark/corner.py/tarball/master#egg=corner_jiwoncpark'],
       include_package_data=True,
