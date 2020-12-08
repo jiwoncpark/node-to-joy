@@ -1,24 +1,67 @@
 import os
 import sys
 import itertools
+import functools
+import time
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import multiprocessing
 from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 #from lenstronomy.LensModel.Profiles.nfw import NFW
 from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
 
-def get_cosmodc2_generator():
-# Divide into N chunks
+dest_dir = 'multi_sprint'
+
+def get_cosmodc2_generator(columns=None):
+    # Divide into N chunks
     cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
     #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
     chunksize = 10000
     nrows = None
-    cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows)
+    cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
+                           usecols=columns)
     return cosmodc2
 
-def get_sightlines(edge_buffer=3.0, grid_size=15.0):
+def get_healpix_bounds(edge_buffer=0.0):
+    """Get the bounds of a healpix in deg
+
+    """
+    cosmodc2 = get_cosmodc2_generator()
+    # Get min and max ra, dec
+    min_ra, max_ra = np.inf, -np.inf
+    min_dec, max_dec = np.inf, -np.inf
+    for df in cosmodc2:
+        ra = df['ra'].values #df.loc[: 'ra'] *= 60.0 # deg to arcmin
+        dec = df['dec'].values #df.loc[: 'dec'] *= 60.0 # deg to arcmin
+        min_ra = min(min_ra, ra.min())
+        max_ra = max(max_ra, ra.max())
+        min_dec = min(min_dec, dec.min())
+        max_dec = max(max_dec, dec.max())
+    print("ra range: ", min_ra, max_ra, "size in deg: ", max_ra - min_ra)
+    print("dec range: ", min_dec, max_dec, "size in deg: ", max_dec - min_dec)
+    bounds = dict(
+                  min_ra=min_ra+edge_buffer, max_ra=max_ra-edge_buffer,
+                  min_dec=min_dec+edge_buffer, max_dec=max_dec-edge_buffer,
+                  )
+    return bounds
+
+def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
+    """Check if the given galaxy positions fall inside the bounds
+
+    Parameters
+    ----------
+    pos_ra : np.array
+    pos_dec : np.array
+    **bounds
+
+    """
+    inside_ra = np.logical_and(pos_ra < max_ra, pos_ra > min_ra)
+    inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
+    return np.logical_and(inside_ra, inside_dec)
+
+def get_sightlines_on_grid(edge_buffer=3.0, grid_size=15.0):
     """Get the sightlines
     
     Parameters
@@ -28,26 +71,22 @@ def get_sightlines(edge_buffer=3.0, grid_size=15.0):
     grid_size : float
         size of each grid in arcmin
 
+    Notes
+    -----
+    Currently takes ~7 hr for 156 sightlines (grid size of 15 arcmin),
+    but doesn't have to be so rigorous about finding sightlines closest to grid.
+    Two requirements are that sightlines need to be dominated by cosmic variance
+    (span a few degrees) and that each sightline has a galaxy.
+
     """
-    cosmodc2 = get_cosmodc2_generator()
-    # Get min and max ra, dec
-    min_ra, max_ra = np.inf, -np.inf
-    min_dec, max_dec = np.inf, -np.inf
-    for df in cosmodc2:
-        ra = df['ra'].values*60.0 #df.loc[: 'ra'] *= 60.0 # deg to arcmin
-        dec = df['dec'].values*60.0 #df.loc[: 'dec'] *= 60.0 # deg to arcmin
-        min_ra = min(min_ra, ra.min())
-        max_ra = max(max_ra, ra.max())
-        min_dec = min(min_dec, dec.min())
-        max_dec = max(max_dec, dec.max())
-    print("ra range: ", min_ra, max_ra, "size in amin: ", max_ra - min_ra)
-    print("dec range: ", min_dec, max_dec, "size in amin: ", max_dec - min_dec)
+    
     # Get centroids of D partitions by gridding the sky area and querying a 
     # galaxy closest to each grid center at redshift z > 2
     # Each partition, centered at that galaxy, 
     # corresponds to a line of sight (LOS)
-    ra_grid = np.arange(min_ra + edge_buffer, max_ra - edge_buffer, grid_size) + grid_size*0.5 # arcmin
-    dec_grid = np.arange(min_dec + edge_buffer, max_dec - edge_buffer, grid_size) + grid_size*0.5 # arcmin
+    bounds = get_healpix_bounds()
+    ra_grid = np.arange(bounds['min_ra'], bounds['max_ra'], grid_size) + grid_size*0.5 # arcmin
+    dec_grid = np.arange(bounds['min_dec'], bounds['max_dec'], grid_size) + grid_size*0.5 # arcmin
     grid_center = list(itertools.product(ra_grid, dec_grid))
     print(len(grid_center))
     sightlines = []
@@ -70,87 +109,166 @@ def get_sightlines(edge_buffer=3.0, grid_size=15.0):
                     min_dist = high_z['eps'].min()
                     sightline = high_z.iloc[np.argmin(high_z['eps'].values)] # closest to g
         if sightline is not None:
-            sightlines.append((sightline['ra'], sightline['dec'], sightline['redshift'], sightline['eps']))
+            sightlines.append((sightline['ra'], sightline['dec'], sightline['redshift'], sightline['eps'], sightline['convergence']))
     print(len(sightlines))
     print("Sightlines: ", sightlines[4])
     print("Grids: ", list(grid_center)[4])
     np.save('sightlines.npy', sightlines)
-    sys.exit()
 
-def raytrace(fov=6.0, map_kappa=False, n_realizations=1000):
-    sightlines = np.load('sightlines.npy')
-    print(sightlines.shape)
-    for i, (ra_los, dec_los, z_src, _) in enumerate(sightlines): # FIXME
-        if os.path.exists('los_halos_{:d}.csv'.format(i)):
-            halos = pd.read_csv('los_halos_{:d}.csv'.format(i), index_col=None)
+def get_sightlines_random(n_sightlines, edge_buffer=3.0):
+    """Get the sightlines
+    
+    Parameters
+    ----------
+    edge_buffer : float
+        buffer for the edge of healpix, in arcmin
+
+    Notes
+    -----
+    Currently takes ~1 min for 1,000 sightlines. Will preferentially select
+    lower-z galaxies 
+
+    """
+    start = time.time()
+    bounds = get_healpix_bounds(edge_buffer=edge_buffer/60.0)
+    cosmodc2 = get_cosmodc2_generator(['ra', 'dec', 'redshift', 'convergence'])
+    N = 0 # init number of sightlines obtained so far
+    sightlines = pd.DataFrame()
+    #while N < n_sightlines:
+    #    df = next(cosmodc2)
+    for df in cosmodc2:
+        high_z = df[(df['redshift']>2.0)].reset_index(drop=True)
+        if high_z.shape[0] == 0:
+            continue
         else:
-            cosmodc2 = get_cosmodc2_generator()
-            halos = pd.DataFrame() # neighboring galaxies in LOS
-            # Iterate through chunks to bin galaxies into the partitions
-            for df in tqdm(cosmodc2, desc="Looping through chunks"):
-                # Get galaxies in the aperture and in foreground of source
-                # Discard smaller masses, since they won't have a big impact anyway
-                massive = df[df['halo_mass'] > 1e11].reset_index(drop=True)
-                lower_z = massive[massive['baseDC2/target_halo_redshift']<z_src].reset_index(drop=True)
-                if len(lower_z) > 0:
-                    d, ra_diff, dec_diff = get_distance(
-                                                       ra_f=lower_z['ra'].values,
-                                                       dec_f=lower_z['dec'].values,
-                                                       ra_i=ra_los,
-                                                       dec_i=dec_los
-                                                       )
-                    lower_z['dist'] = d*60.0 # deg to arcmin
-                    lower_z['ra_diff'] = ra_diff # deg
-                    lower_z['dec_diff'] = dec_diff # deg
-                    lower_z = lower_z[lower_z['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
-                    halos = pd.concat([halos, lower_z[lower_z['dist'].values < fov*0.5]], ignore_index=True)
-            halos.reset_index(drop=True)
-            halos.to_csv('los_halos_{:d}.csv'.format(i), index=None)
-        n_halos = halos.shape[0]
-        print(n_halos)
-        # Convert angular to physical mass units 
-        # for feeding into NFW model as kwargs
-        print("Source redshift: ", z_src)
-        c_200 = get_concentration(halos['halo_mass'].values, 
-                                  halos['stellar_mass'].values)
-        halos['Rs'] = None
-        halos['alpha_Rs'] = None
-        halos['center_x'] = halos['ra_diff']*3600.0 # deg to arcsec
-        halos['center_y'] = halos['dec_diff']*3600.0
-        for halo_i in range(n_halos):
-            lens_cosmo = LensCosmo(z_lens=halos.loc[halo_i, 'baseDC2/target_halo_redshift'], 
-                                   z_source=z_src, 
-                                   cosmo=WMAP7)
-            Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halos.loc[halo_i, 'halo_mass'], 
-                                                               c=c_200[halo_i])
-            rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, alpha_Rs=alpha_Rs)
-            halos.loc[halo_i, ['Rs']] = Rs
-            halos.loc[halo_i, ['alpha_Rs']] = alpha_Rs
+            inside = fall_inside_bounds(high_z['ra'], high_z['dec'], **bounds)
+            high_z = high_z[inside].reset_index(drop=True)
+            more_sightlines = high_z.sample(min(high_z.shape[0], n_sightlines//100))
+            N += n_sightlines//100
+            sightlines = pd.concat([sightlines, more_sightlines], ignore_index=True)
+    end = time.time()
+    print("Took {:f} seconds to get {:d} sightlines.".format(end-start, N))
+    sightlines.reset_index(drop=True).to_csv('{:s}/random_sightlines.csv'.format(dest_dir), index=None)
 
-        realized_kappa = np.empty(n_realizations)
-        for r in range(n_realizations):
-            new_ra, new_dec = sample_in_aperture(n_halos, fov*0.5)
+def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, out_path):
+    halo_cols = ['baseDC2/target_halo_redshift',  'halo_mass', 'stellar_mass']
+    halo_cols += ['ra', 'dec',]
+    cosmodc2 = get_cosmodc2_generator(halo_cols)
+    halos = pd.DataFrame() # neighboring galaxies in LOS
+    # Iterate through chunks to bin galaxies into the partitions
+    for df in cosmodc2:
+        # Get galaxies in the aperture and in foreground of source
+        # Discard smaller masses, since they won't have a big impact anyway
+        massive = df[df['halo_mass'] > 1e11].reset_index(drop=True)
+        lower_z = massive[massive['baseDC2/target_halo_redshift']<z_src].reset_index(drop=True)
+        if len(lower_z) > 0:
+            d, ra_diff, dec_diff = get_distance(
+                                               ra_f=lower_z['ra'].values,
+                                               dec_f=lower_z['dec'].values,
+                                               ra_i=ra_los,
+                                               dec_i=dec_los
+                                               )
+            lower_z['dist'] = d*60.0 # deg to arcmin
+            lower_z['ra_diff'] = ra_diff # deg
+            lower_z['dec_diff'] = dec_diff # deg
+            lower_z = lower_z[lower_z['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
+            halos = pd.concat([halos, lower_z[lower_z['dist'].values < fov*0.5]], ignore_index=True)
+        else:
+            break
+    halos.reset_index(drop=True)
+    halos.to_csv(out_path, index=None)
+    return halos
+
+def raytrace(fov=6.0, map_kappa=False, n_sightlines=None, n_kappa_samples=1000):
+    """Raytrace through all sightlines
+
+    Parameters
+    ----------
+    fov : float
+        field of view in arcmin
+
+    """
+    pass
+
+def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_kappa,
+                              n_kappa_samples):
+    """Raytrace through a single sightline
+
+    """
+    halo_filename = '{:s}/los_halos_sightline={:d}.csv'.format(dest_dir, idx)
+    if os.path.exists(halo_filename):
+        halos = pd.read_csv(halo_filename, index_col=None)
+    else:
+        halos = get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, halo_filename)    
+    n_halos = halos.shape[0]
+    #####################
+    # Define NFW kwargs #
+    #####################
+    halos['center_x'] = halos['ra_diff']*3600.0 # deg to arcsec
+    halos['center_y'] = halos['dec_diff']*3600.0
+    Rs, alpha_Rs = get_nfw_kwargs(halos['halo_mass'].values, 
+                                  halos['stellar_mass'].values,
+                                  halos['baseDC2/target_halo_redshift'].values,
+                                  z_src)
+    halos['Rs'] = Rs
+    halos['alpha_Rs'] = alpha_Rs
+    # Instantiate multi-plane lens model
+    lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
+                           z_source=z_src, 
+                           lens_redshift_list=halos['baseDC2/target_halo_redshift'].values, 
+                           multi_plane=True,
+                           cosmo=WMAP7,
+                           observed_convention_index=[])
+    if map_kappa:
+        nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
+        get_kappa_map(lens_model, nfw_kwargs, fov,
+                      '{:s}/kappa_map_sightline={:d}.npy'.format(dest_dir, idx))
+    ################
+    # Sample kappa #
+    ################
+    kappa_samples_path = '{:s}/kappa_samples_sightline={:d}.npy'.format(dest_dir, idx)
+    if os.path.exists(kappa_samples_path):
+        pass
+    else:
+        kappa_samples = np.empty(n_kappa_samples)
+        for s in range(n_kappa_samples):
+            new_ra, new_dec = sample_in_aperture(n_halos, fov*0.5/60.0)
             halos['center_x'] = new_ra*3600.0 # deg to arcsec
             halos['center_y'] = new_dec*3600.0 # deg to arcsec
             nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-            # Instantiate multi-plane lens model
-            lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
-                                   z_source=z_src, 
-                                   lens_redshift_list=halos['baseDC2/target_halo_redshift'].values, 
-                                   multi_plane=True,
-                                   cosmo=WMAP7,
-                                   observed_convention_index=[])
-            realized_kappa[r] = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=0.01)
-        np.save('realized_kappa_sightline={:d}.npy'.format(i), realized_kappa)
+            kappa_samples[s] = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=0.01)
+            if map_kappa:
+                get_kappa_map(lens_model, nfw_kwargs, fov,
+                          '{:s}/kappa_map_sightline={:d}_sample={:d}.npy'.format(dest_dir, idx, s))
+        np.save(kappa_samples_path, kappa_samples)
 
-        if map_kappa:
-            # Map the kappa
-            x_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
-            y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
-            xx, yy = np.meshgrid(x_grid, y_grid)
-            print(xx.shape, yy.shape)
-            kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=0.01)
-            np.save('kappa_map_diff.npy', kappa_map)
+def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
+    c_200 = get_concentration(halo_mass, stellar_mass)
+    n_halos = len(halo_mass)
+    halo_Rs, halo_alpha_Rs = np.empty(n_halos), np.empty(n_halos)
+    for halo_i in range(n_halos):
+        lens_cosmo = LensCosmo(z_lens=halo_z[halo_i], z_source=z_src, cosmo=WMAP7)
+        Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass[halo_i],
+                                                           c=c_200[halo_i])
+        rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
+                                                                alpha_Rs=alpha_Rs)
+        halo_Rs[halo_i] = Rs
+        halo_alpha_Rs[halo_i] = alpha_Rs
+    return halo_Rs, halo_alpha_Rs
+
+def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
+    """Plot a map of kappa and save to disk
+
+    """
+    # 1 asec rez, in arcsec units
+    if x_grid is None:
+        x_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
+    if y_grid is None:
+        y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
+    xx, yy = np.meshgrid(x_grid, y_grid)
+    kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=0.01)
+    np.save(save_path, kappa_map)
+    return kappa_map
 
 def sample_in_aperture(N, radius):
     """Sample N points around a zero coordinate on the celestial sphere
@@ -203,12 +321,84 @@ def get_concentration(halo_mass, stellar_mass,
     #h = cosmo.H0/100.0
     b = trans_M_ratio / halo_M_ratio # trans mass / stellar mass
     c_200 = A*(((halo_M_ratio/b)**m)*(1.0 + (halo_M_ratio/b)**(-m)) - 1.0) + c_0
-    return c_200
+    spread = np.random.randn(*halo_M_ratio.shape)*(c_200/3.0) # cosmo-indep
+    return c_200 + spread
+
+def is_outlier(points, thresh=3):
+    """
+    Returns a boolean array with True if points are outliers and False 
+    otherwise.
+
+    Parameters:
+    -----------
+        points : An numobservations by numdimensions array of observations
+        thresh : The modified z-score to use as a threshold. Observations with
+            a modified z-score (based on the median absolute deviation) greater
+            than this value will be classified as outliers.
+
+    Returns:
+    --------
+        mask : A numobservations-length boolean array.
+
+    References:
+    ----------
+        Boris Iglewicz and David Hoaglin (1993), "Volume 16: How to Detect and
+        Handle Outliers", The ASQC Basic References in Quality Control:
+        Statistical Techniques, Edward F. Mykytka, Ph.D., Editor. 
+    """
+    if len(points.shape) == 1:
+        points = points[:,None]
+    median = np.median(points, axis=0)
+    diff = np.sum((points - median)**2, axis=-1)
+    diff = np.sqrt(diff)
+    med_abs_deviation = np.median(diff)
+    modified_z_score = 0.6745 * diff / med_abs_deviation
+    return modified_z_score > thresh
+
+def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples):
+    sightline = sightlines.iloc[i]
+    raytrace_single_sightline(i, 
+                              sightline['ra'], sightline['dec'],
+                              sightline['redshift'], 
+                              sightline['convergence'],
+                              fov,
+                              map_kappa,
+                              n_kappa_samples)
+    return None
+
+class Sightlines:
+    def __init__(self):
+        sightlines_path = '{:s}/random_sightlines.csv'.format(dest_dir)
+        self.sightlines = pd.read_csv(sightlines_path, index_col=None)
+        self.fov = 6.0
+        self.map_kappa = False
+        self.n_sightlines = self.sightlines.shape[0]
+
+    def parallel_raytrace(self):
+        single = functools.partial(single_raytrace, 
+                                   sightlines=self.sightlines, 
+                                   fov=self.fov, 
+                                   map_kappa=self.map_kappa, 
+                                   n_kappa_samples=self.n_sightlines)
+        #return pool.map(single, )
+        return list(tqdm(pool.imap(single, range(self.n_sightlines)), 
+                         total=self.n_sightlines))
 
 if __name__ == '__main__':
-    get_sightlines()
-    #raytrace(fov=6.0, map_kappa=False, n_realizations=1000)
+    #get_sightlines()
+    #get_sightlines_random(n_sightlines=1000)
+    with multiprocessing.Pool(multiprocessing.cpu_count() - 1) as pool:
+        Sightlines().parallel_raytrace()
+
+    #for i in tqdm(range(n_sightlines), desc="Raytracing through each sightline"):
+    #    
+    #raytrace(fov=6.0, map_kappa=True, n_sightlines=1, n_kappa_samples=5)
+    #
+    #
+    #
+
 #self, z_source, lens_model_list, lens_redshift_list, cosmo=None, numerical_alpha_class=None, observed_convention_index=None, ignore_observed_positions=False, z_source_convention=None
 
 #mag_g_lsst,baseDC2/target_halo_z,ellipticity_1_true,size_minor_disk_true,baseDC2/host_halo_vx,mag_z_lsst,shear1,baseDC2/target_halo_vx,baseDC2/host_halo_x,shear_2_phosim,mag_u_lsst,mag_i_lsst,baseDC2/host_halo_vy,baseDC2/host_halo_z,redshift_true,
 #baseDC2/target_halo_redshift,baseDC2/host_halo_vz,baseDC2/target_halo_vz,baseDC2/target_halo_vy,mag_Y_lsst,dec,convergence,baseDC2/target_halo_fof_halo_id,baseDC2/target_halo_mass,ellipticity_bulge_true,baseDC2/halo_id,shear_1,baseDC2/target_halo_id,shear2,baseDC2/host_halo_y,ellipticity_2_bulge_true,size_minor_true,galaxy_id,ellipticity_2_disk_true,stellar_mass,position_angle_true,baseDC2/target_halo_x,baseDC2/target_halo_y,ellipticity_2_true,size_true,ellipticity_1_bulge_true,halo_mass,mag_r_lsst,baseDC2/source_halo_id,baseDC2/source_halo_mvir,halo_id,size_disk_true,shear_2,bulge_to_total_ratio_i,size_minor_bulge_true,baseDC2/host_halo_mvir,size_bulge_true,ellipticity_1_disk_true,stellar_mass_bulge,ra,stellar_mass_disk,ellipticity_disk_true,ellipticity_true,shear_2_treecorr,redshift
+
