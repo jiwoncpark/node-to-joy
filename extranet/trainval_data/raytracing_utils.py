@@ -19,7 +19,7 @@ def get_cosmodc2_generator(columns=None):
     # Divide into N chunks
     cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
     #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
-    chunksize = 100000
+    chunksize = 10000
     nrows = None
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
                            usecols=columns)
@@ -177,6 +177,17 @@ def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, out_path):
         else:
             break
     halos.reset_index(drop=True)
+    #####################
+    # Define NFW kwargs #
+    #####################
+    halos['center_x'] = halos['ra_diff']*3600.0 # deg to arcsec
+    halos['center_y'] = halos['dec_diff']*3600.0
+    Rs, alpha_Rs = get_nfw_kwargs(halos['halo_mass'].values, 
+                                  halos['stellar_mass'].values,
+                                  halos['baseDC2/target_halo_redshift'].values,
+                                  z_src)
+    halos['Rs'] = Rs
+    halos['alpha_Rs'] = alpha_Rs
     halos.to_csv(out_path, index=None)
     return halos
 
@@ -305,17 +316,6 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
     else:
         halos = get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, halo_filename)    
     n_halos = halos.shape[0]
-    #####################
-    # Define NFW kwargs #
-    #####################
-    halos['center_x'] = halos['ra_diff']*3600.0 # deg to arcsec
-    halos['center_y'] = halos['dec_diff']*3600.0
-    Rs, alpha_Rs = get_nfw_kwargs(halos['halo_mass'].values, 
-                                  halos['stellar_mass'].values,
-                                  halos['baseDC2/target_halo_redshift'].values,
-                                  z_src)
-    halos['Rs'] = Rs
-    halos['alpha_Rs'] = alpha_Rs
     # Instantiate multi-plane lens model
     lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
                            z_source=z_src, 
@@ -323,8 +323,13 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
                            multi_plane=True,
                            cosmo=WMAP7,
                            observed_convention_index=[])
+    nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
+    uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=0.01)
+    uncalib_kappas_path = os.path.join(dest_dir, 'uncalib_kappas.txt') # FIXME
+    with open(uncalib_kappas_path, 'a') as f:
+        f.write("{:d},\t{:f}\n".format(idx, uncalib_kappa))
+
     if map_kappa:
-        nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
         get_kappa_map(lens_model, nfw_kwargs, fov,
                       '{:s}/kappa_map_sightline={:d}.npy'.format(dest_dir, idx))
     ################

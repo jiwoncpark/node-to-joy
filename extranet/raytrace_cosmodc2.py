@@ -56,6 +56,8 @@ class Sightlines:
         self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
         self._get_pointings()
+        self.uncalib_kappa_path = os.path.join(self.dest_dir, 'uncalib_kappas.txt')
+        open(self.uncalib_kappa_path, 'a').close()
         
     def _get_pointings(self):
         sightlines_path = '{:s}/random_sightlines.csv'.format(self.dest_dir)
@@ -73,7 +75,7 @@ class Sightlines:
                                    sightlines=self.pointings, 
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
-                                   n_kappa_samples=1000,
+                                   n_kappa_samples=0,
                                    mass_cut=self.mass_cut,
                                    dest_dir=self.dest_dir)
         #return pool.map(single, )
