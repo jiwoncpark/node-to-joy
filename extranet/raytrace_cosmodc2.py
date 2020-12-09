@@ -16,9 +16,11 @@ import functools
 import pandas as pd
 from tqdm import tqdm
 import multiprocessing
-from extranet.trainval_data.raytracing_utils import raytrace_single_sightline
+from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
+get_sightlines_random)
 
 def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, dest_dir):
+    """Wrapper around `raytrace_single_sightline` to enable multiprocessing"""
     sightline = sightlines.iloc[i]
     raytrace_single_sightline(i, 
                               sightline['ra'], sightline['dec'],
@@ -32,23 +34,38 @@ def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, dest_dir):
 
 class Sightlines:
     """Set of sightlines in a cosmoDC2 field"""
-    def __init__(self, dest_dir):
+    def __init__(self, dest_dir, fov, map_kappa, n_sightlines=1000):
         """
         Parameters
         ----------
         dest_dir : str or os.path
+        fov : float
+            field of view in arcmin
+        map_kappa : bool
+            whether to generate grid maps of kappa
+        n_sightlines : int
+            number of sightlines to raytrace through (Default: 1000)
 
         """
-        sightlines_path = '{:s}/random_sightlines.csv'.format(dest_dir)
-        self.sightlines = pd.read_csv(sightlines_path, index_col=None)
-        self.fov = 6.0
-        self.map_kappa = False
-        self.n_sightlines = self.sightlines.shape[0]
         self.dest_dir = dest_dir
+        self.fov = fov
+        self.map_kappa = map_kappa
+        self.n_sightlines = n_sightlines
+        self._get_pointings()
+        
+    def _get_pointings(self):
+        sightlines_path = '{:s}/random_sightlines.csv'.format(self.dest_dir)
+        if os.path.exists(sightlines_path):
+            self.pointings = pd.read_csv(sightlines_path, 
+                                         index_col=None,
+                                         nrows=self.n_sightlines)
+        else:
+            self.pointings = get_sightlines_random(self.n_sightlines, 
+                                                   sightlines_path)
 
     def parallel_raytrace(self):
         single = functools.partial(single_raytrace, 
-                                   sightlines=self.sightlines, 
+                                   sightlines=self.pointings, 
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
                                    n_kappa_samples=self.n_sightlines,
@@ -59,14 +76,20 @@ class Sightlines:
 
 if __name__ == '__main__':
     #get_sightlines()
-    #get_sightlines_random(n_sightlines=1000)
+    #
     parser = argparse.ArgumentParser()
     parser.add_argument('dest_dir',
                         help='destination folder for the kappa maps, samples')
+    parser.add_argument('--fov', default=6.0, dest='fov', type=float,
+                        help='field of view in arcmin (Default: 6.0)')
+    parser.add_argument('--map_kappa', default=False, dest='map_kappa', type=bool,
+                        help='whether to generate grid maps of kappa (Default: False)')
+    parser.add_argument('--n_sightlines', default=None, dest='n_sightlines', type=int,
+                        help='number of sightlines to raytrace through')
     args = parser.parse_args()
 
     with multiprocessing.Pool(multiprocessing.cpu_count() - 1) as pool:
-        Sightlines(args.dest_dir).parallel_raytrace()
+        Sightlines(**vars(args)).parallel_raytrace()
 
     #for i in tqdm(range(n_sightlines), desc="Raytracing through each sightline"):
     #    

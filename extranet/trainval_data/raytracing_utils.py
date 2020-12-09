@@ -116,7 +116,7 @@ def get_sightlines_on_grid(edge_buffer=3.0, grid_size=15.0):
     print("Grids: ", list(grid_center)[4])
     np.save('sightlines.npy', sightlines)
 
-def get_sightlines_random(n_sightlines, edge_buffer=3.0, dest_dir):
+def get_sightlines_random(n_sightlines, out_path, edge_buffer=3.0):
     """Get the sightlines
     
     Parameters
@@ -149,7 +149,7 @@ def get_sightlines_random(n_sightlines, edge_buffer=3.0, dest_dir):
             sightlines = pd.concat([sightlines, more_sightlines], ignore_index=True)
     end = time.time()
     print("Took {:f} seconds to get {:d} sightlines.".format(end-start, N))
-    sightlines.reset_index(drop=True).to_csv('{:s}/random_sightlines.csv'.format(dest_dir), index=None)
+    sightlines.reset_index(drop=True).to_csv(out_path, index=None)
 
 def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, out_path):
     halo_cols = ['baseDC2/target_halo_redshift',  'halo_mass', 'stellar_mass']
@@ -179,7 +179,6 @@ def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, out_path):
     halos.reset_index(drop=True)
     halos.to_csv(out_path, index=None)
     return halos
-
 
 def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     c_200 = get_concentration(halo_mass, stellar_mass)
