@@ -19,7 +19,7 @@ def get_cosmodc2_generator(columns=None):
     # Divide into N chunks
     cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
     #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
-    chunksize = 10000
+    chunksize = 100000
     nrows = None
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
                            usecols=columns)

@@ -75,7 +75,7 @@ class Sightlines:
                                    sightlines=self.pointings, 
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
-                                   n_kappa_samples=0,
+                                   n_kappa_samples=1000,
                                    mass_cut=self.mass_cut,
                                    dest_dir=self.dest_dir)
         #return pool.map(single, )
