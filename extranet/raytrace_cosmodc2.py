@@ -19,7 +19,7 @@ import multiprocessing
 from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
 get_sightlines_random)
 
-def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, dest_dir):
+def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, mass_cut, dest_dir):
     """Wrapper around `raytrace_single_sightline` to enable multiprocessing"""
     sightline = sightlines.iloc[i]
     raytrace_single_sightline(i, 
@@ -29,12 +29,13 @@ def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, dest_dir):
                               fov,
                               map_kappa,
                               n_kappa_samples,
+                              mass_cut,
                               dest_dir)
     return None
 
 class Sightlines:
     """Set of sightlines in a cosmoDC2 field"""
-    def __init__(self, dest_dir, fov, map_kappa, n_sightlines=1000):
+    def __init__(self, dest_dir, fov, map_kappa, mass_cut=11, n_sightlines=1000):
         """
         Parameters
         ----------
@@ -43,6 +44,8 @@ class Sightlines:
             field of view in arcmin
         map_kappa : bool
             whether to generate grid maps of kappa
+        mass_cut : float
+            log10(minimum halo mass) (Default: 11.0)
         n_sightlines : int
             number of sightlines to raytrace through (Default: 1000)
 
@@ -50,6 +53,7 @@ class Sightlines:
         self.dest_dir = dest_dir
         self.fov = fov
         self.map_kappa = map_kappa
+        self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
         self._get_pointings()
         
@@ -61,7 +65,8 @@ class Sightlines:
                                          nrows=self.n_sightlines)
         else:
             self.pointings = get_sightlines_random(self.n_sightlines, 
-                                                   sightlines_path)
+                                                   sightlines_path,
+                                                   edge_buffer=self.fov*0.5)
 
     def parallel_raytrace(self):
         single = functools.partial(single_raytrace, 
@@ -69,6 +74,7 @@ class Sightlines:
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
                                    n_kappa_samples=1000,
+                                   mass_cut=self.mass_cut,
                                    dest_dir=self.dest_dir)
         #return pool.map(single, )
         return list(tqdm(pool.imap(single, range(self.n_sightlines)), 
@@ -86,6 +92,8 @@ if __name__ == '__main__':
                         help='whether to generate grid maps of kappa (Default: False)')
     parser.add_argument('--n_sightlines', default=1000, dest='n_sightlines', type=int,
                         help='number of sightlines to raytrace through (Default: 1000)')
+    parser.add_argument('--mass_cut', default=11.0, dest='mass_cut', type=float,
+                        help='log10(minimum halo mass) (Default: 11.0)')
     args = parser.parse_args()
 
     with multiprocessing.Pool(multiprocessing.cpu_count() - 1) as pool:

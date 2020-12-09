@@ -151,7 +151,7 @@ def get_sightlines_random(n_sightlines, out_path, edge_buffer=3.0):
     print("Took {:f} seconds to get {:d} sightlines.".format(end-start, N))
     sightlines.reset_index(drop=True).to_csv(out_path, index=None)
 
-def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, out_path):
+def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, out_path):
     halo_cols = ['baseDC2/target_halo_redshift',  'halo_mass', 'stellar_mass']
     halo_cols += ['ra', 'dec',]
     cosmodc2 = get_cosmodc2_generator(halo_cols)
@@ -160,7 +160,7 @@ def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, out_path):
     for df in cosmodc2:
         # Get galaxies in the aperture and in foreground of source
         # Discard smaller masses, since they won't have a big impact anyway
-        massive = df[df['halo_mass'] > 1e11].reset_index(drop=True)
+        massive = df[df['halo_mass'] > 10.0**mass_cut].reset_index(drop=True)
         lower_z = massive[massive['baseDC2/target_halo_redshift']<z_src].reset_index(drop=True)
         if len(lower_z) > 0:
             d, ra_diff, dec_diff = get_distance(
@@ -295,7 +295,7 @@ def is_outlier(points, thresh=3):
     return modified_z_score > thresh
 
 def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_kappa,
-                              n_kappa_samples, dest_dir):
+                              n_kappa_samples, mass_cut, dest_dir):
     """Raytrace through a single sightline
 
     """
@@ -303,7 +303,7 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
     if os.path.exists(halo_filename):
         halos = pd.read_csv(halo_filename, index_col=None)
     else:
-        halos = get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, halo_filename)    
+        halos = get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, halo_filename)    
     n_halos = halos.shape[0]
     #####################
     # Define NFW kwargs #
