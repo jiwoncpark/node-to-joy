@@ -68,7 +68,7 @@ class Sightlines:
                                    sightlines=self.pointings, 
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
-                                   n_kappa_samples=self.n_sightlines,
+                                   n_kappa_samples=1000,
                                    dest_dir=self.dest_dir)
         #return pool.map(single, )
         return list(tqdm(pool.imap(single, range(self.n_sightlines)), 
