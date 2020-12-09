@@ -84,8 +84,8 @@ if __name__ == '__main__':
                         help='field of view in arcmin (Default: 6.0)')
     parser.add_argument('--map_kappa', default=False, dest='map_kappa', type=bool,
                         help='whether to generate grid maps of kappa (Default: False)')
-    parser.add_argument('--n_sightlines', default=None, dest='n_sightlines', type=int,
-                        help='number of sightlines to raytrace through')
+    parser.add_argument('--n_sightlines', default=1000, dest='n_sightlines', type=int,
+                        help='number of sightlines to raytrace through (Default: 1000)')
     args = parser.parse_args()
 
     with multiprocessing.Pool(multiprocessing.cpu_count() - 1) as pool:
