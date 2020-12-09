@@ -19,7 +19,7 @@ def get_cosmodc2_generator(columns=None):
     # Divide into N chunks
     cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
     #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
-    chunksize = 10000
+    chunksize = 100000
     nrows = None
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
                            usecols=columns)
@@ -259,8 +259,9 @@ def get_concentration(halo_mass, stellar_mass,
     #h = cosmo.H0/100.0
     b = trans_M_ratio / halo_M_ratio # trans mass / stellar mass
     c_200 = A*(((halo_M_ratio/b)**m)*(1.0 + (halo_M_ratio/b)**(-m)) - 1.0) + c_0
-    spread = np.random.randn(*halo_M_ratio.shape)*(c_200/3.0) # cosmo-indep
-    return c_200 + spread
+    c_200 += np.random.randn(*halo_M_ratio.shape)*(c_200/3.0) # cosmo-indep
+    c_200 = np.maximum(c_200, 1.0)
+    return c_200
 
 def is_outlier(points, thresh=3):
     """
