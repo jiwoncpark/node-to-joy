@@ -19,7 +19,7 @@ def get_cosmodc2_generator(columns=None):
     # Divide into N chunks
     cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
     #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
-    chunksize = 100000
+    chunksize = 10000
     nrows = None
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
                            usecols=columns)
@@ -215,7 +215,7 @@ def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=No
     if y_grid is None:
         y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
     xx, yy = np.meshgrid(x_grid, y_grid)
-    kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=0.01)
+    kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=1.0)
     np.save(save_path, kappa_map)
     return kappa_map
 
@@ -324,7 +324,7 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
                            cosmo=WMAP7,
                            observed_convention_index=[])
     nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-    uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=0.01)
+    uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
     uncalib_kappas_path = os.path.join(dest_dir, 'uncalib_kappas.txt') # FIXME
     with open(uncalib_kappas_path, 'a') as f:
         f.write("{:d},\t{:f}\n".format(idx, uncalib_kappa))
@@ -345,7 +345,7 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
             halos['center_x'] = new_ra*3600.0 # deg to arcsec
             halos['center_y'] = new_dec*3600.0 # deg to arcsec
             nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-            kappa_samples[s] = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=0.01)
+            kappa_samples[s] = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
             if map_kappa:
                 get_kappa_map(lens_model, nfw_kwargs, fov,
                           '{:s}/kappa_map_sightline={:d}_sample={:d}.npy'.format(dest_dir, idx, s))
