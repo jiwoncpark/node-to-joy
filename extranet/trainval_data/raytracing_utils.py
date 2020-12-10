@@ -395,13 +395,19 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
         pass
     else:
         kappa_samples = np.empty(n_kappa_samples)
-        for s in range(n_kappa_samples):
+        S = 0
+        while S < n_kappa_samples:
             new_ra, new_dec = sample_in_aperture(n_halos, fov*0.5/60.0)
             halos['center_x'] = new_ra*3600.0 # deg to arcsec
             halos['center_y'] = new_dec*3600.0 # deg to arcsec
             nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-            kappa_samples[s] = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
-            if map_kappa:
-                get_kappa_map(lens_model, nfw_kwargs, fov,
-                          '{:s}/kappa_map_sightline={:d}_sample={:d}.npy'.format(dest_dir, idx, s))
+            resampled_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
+            if resampled_kappa < 1.0:
+                kappa_samples[S] = resampled_kappa
+                S += 1
+                if map_kappa:
+                    get_kappa_map(lens_model, nfw_kwargs, fov,
+                          '{:s}/kappa_map_sightline={:d}_sample={:d}.npy'.format(dest_dir, idx, S))
+            else: # halo fell on top of zeropoint!
+                continue
         np.save(kappa_samples_path, kappa_samples)
