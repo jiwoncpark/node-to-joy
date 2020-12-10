@@ -16,7 +16,7 @@ __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
 __all__ += ['sample_in_aperture', 'get_distance', 'get_concentration']
 __all__ += ['is_outlier', 'raytrace_single_sightline']
 
-def get_cosmodc2_generator(healpix, columns=None, chunksize=10000):
+def get_cosmodc2_generator(healpix, columns=None, chunksize=100000):
     """Get a generator of cosmoDC2, too big to store in memory at once
 
     """
@@ -45,7 +45,7 @@ def get_prestored_healpix_bounds(healpix):
         else:
             return None
 
-def buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer=0.0):
+def buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer):
     """Buffer the bounds
 
     """
@@ -55,7 +55,7 @@ def buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer=0.0):
                   )
     return buffered
 
-def get_healpix_bounds(healpix, edge_buffer=0.0):
+def get_healpix_bounds(healpix, edge_buffer):
     """Get the bounds of a healpix in deg
 
     """
