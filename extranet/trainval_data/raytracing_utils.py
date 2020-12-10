@@ -225,17 +225,11 @@ def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
 
 def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     c_200 = get_concentration(halo_mass, stellar_mass)
-    n_halos = len(halo_mass)
-    halo_Rs, halo_alpha_Rs = np.empty(n_halos), np.empty(n_halos)
-    for halo_i in range(n_halos):
-        lens_cosmo = LensCosmo(z_lens=halo_z[halo_i], z_source=z_src, cosmo=WMAP7)
-        Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass[halo_i],
-                                                           c=c_200[halo_i])
-        rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
-                                                                alpha_Rs=alpha_Rs)
-        halo_Rs[halo_i] = Rs
-        halo_alpha_Rs[halo_i] = alpha_Rs
-    return halo_Rs, halo_alpha_Rs
+    lens_cosmo = LensCosmo(z_lens=halo_z, z_source=z_src, cosmo=WMAP7)
+    Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass, c=c_200)
+    rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
+                                                            alpha_Rs=alpha_Rs)
+    return Rs, alpha_Rs
 
 def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
     """Plot a map of kappa and save to disk
