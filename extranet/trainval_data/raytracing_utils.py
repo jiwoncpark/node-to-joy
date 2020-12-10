@@ -1,3 +1,4 @@
+import yaml
 import os
 import itertools
 import time
@@ -15,21 +16,53 @@ __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
 __all__ += ['sample_in_aperture', 'get_distance', 'get_concentration']
 __all__ += ['is_outlier', 'raytrace_single_sightline']
 
-def get_cosmodc2_generator(columns=None):
-    # Divide into N chunks
-    cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_10450.csv'
-    #cosmodc2_path = 'data/cosmodc2_small/raw/cosmodc2_small_10450.csv'
-    chunksize = 10000
-    nrows = None
-    cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=nrows,
+def get_cosmodc2_generator(healpix, columns=None, chunksize=10000):
+    """Get a generator of cosmoDC2, too big to store in memory at once
+
+    """
+    cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_{:d}.csv'.format(healpix)
+    cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=None,
                            usecols=columns)
     return cosmodc2
 
-def get_healpix_bounds(edge_buffer=0.0):
+def get_prestored_healpix_bounds(healpix):
+    """Fetch bounds from prestored metadata
+
+    """
+    from extranet import trainval_data 
+    meta_path = os.path.join(trainval_data.__path__[0], 'catalog_metadata.yaml')
+    with open(meta_path) as file:
+        meta = yaml.load(file, Loader=yaml.FullLoader)
+        if healpix in meta['cosmodc2']:
+            hp_info = meta['cosmodc2'][healpix]
+            bounds = dict(
+                          min_ra=hp_info['ra']['min'],
+                          max_ra=hp_info['ra']['max'],
+                          min_dec=hp_info['dec']['min'],
+                          max_dec=hp_info['dec']['max'],
+                          )
+            return bounds
+        else:
+            return None
+
+def buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer=0.0):
+    """Buffer the bounds
+
+    """
+    buffered = dict(
+                  min_ra=min_ra+edge_buffer, max_ra=max_ra-edge_buffer,
+                  min_dec=min_dec+edge_buffer, max_dec=max_dec-edge_buffer,
+                  )
+    return buffered
+
+def get_healpix_bounds(healpix, edge_buffer=0.0):
     """Get the bounds of a healpix in deg
 
     """
-    cosmodc2 = get_cosmodc2_generator()
+    prestored_bounds = get_prestored_healpix_bounds(healpix)
+    if prestored_bounds is not None:
+        return buffer_bounds(**prestored_bounds, edge_buffer=edge_buffer)
+    cosmodc2 = get_cosmodc2_generator(healpix, ['ra', 'dec'])
     # Get min and max ra, dec
     min_ra, max_ra = np.inf, -np.inf
     min_dec, max_dec = np.inf, -np.inf
@@ -40,13 +73,7 @@ def get_healpix_bounds(edge_buffer=0.0):
         max_ra = max(max_ra, ra.max())
         min_dec = min(min_dec, dec.min())
         max_dec = max(max_dec, dec.max())
-    print("ra range: ", min_ra, max_ra, "size in deg: ", max_ra - min_ra)
-    print("dec range: ", min_dec, max_dec, "size in deg: ", max_dec - min_dec)
-    bounds = dict(
-                  min_ra=min_ra+edge_buffer, max_ra=max_ra-edge_buffer,
-                  min_dec=min_dec+edge_buffer, max_dec=max_dec-edge_buffer,
-                  )
-    return bounds
+    return buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer)
 
 def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     """Check if the given galaxy positions fall inside the bounds
@@ -62,7 +89,7 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
-def get_sightlines_on_grid(edge_buffer=3.0, grid_size=15.0):
+def get_sightlines_on_grid(healpix, edge_buffer=3.0, grid_size=15.0):
     """Get the sightlines
     
     Parameters
@@ -85,14 +112,14 @@ def get_sightlines_on_grid(edge_buffer=3.0, grid_size=15.0):
     # galaxy closest to each grid center at redshift z > 2
     # Each partition, centered at that galaxy, 
     # corresponds to a line of sight (LOS)
-    bounds = get_healpix_bounds()
+    bounds = get_healpix_bounds(healpix)
     ra_grid = np.arange(bounds['min_ra'], bounds['max_ra'], grid_size) + grid_size*0.5 # arcmin
     dec_grid = np.arange(bounds['min_dec'], bounds['max_dec'], grid_size) + grid_size*0.5 # arcmin
     grid_center = list(itertools.product(ra_grid, dec_grid))
     print(len(grid_center))
     sightlines = []
     for (r, d) in tqdm(grid_center, desc='Finding sightlines'):
-        cosmodc2 = get_cosmodc2_generator()
+        cosmodc2 = get_cosmodc2_generator(healpix)
         min_dist = np.inf # init distance of halo closest to g
         sightline = None
         for df in cosmodc2:
@@ -110,13 +137,13 @@ def get_sightlines_on_grid(edge_buffer=3.0, grid_size=15.0):
                     min_dist = high_z['eps'].min()
                     sightline = high_z.iloc[np.argmin(high_z['eps'].values)] # closest to g
         if sightline is not None:
-            sightlines.append((sightline['ra'], sightline['dec'], sightline['redshift'], sightline['eps'], sightline['convergence']))
+            sightlines.append((sightline['ra'], sightline['dec'], sightline['redshift'], sightline['eps'], sightline['convergence'], sightline['shear1'], sightline['shear2']))
     print(len(sightlines))
     print("Sightlines: ", sightlines[4])
     print("Grids: ", list(grid_center)[4])
     np.save('sightlines.npy', sightlines)
 
-def get_sightlines_random(n_sightlines, out_path, edge_buffer=3.0):
+def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
     """Get the sightlines
     
     Parameters
@@ -131,30 +158,35 @@ def get_sightlines_random(n_sightlines, out_path, edge_buffer=3.0):
 
     """
     start = time.time()
-    bounds = get_healpix_bounds(edge_buffer=edge_buffer/60.0)
-    cosmodc2 = get_cosmodc2_generator(['ra', 'dec', 'redshift', 'convergence'])
+    bounds = get_healpix_bounds(healpix, edge_buffer=edge_buffer/60.0)
+    sightline_cols = ['ra', 'dec', 'redshift', 'convergence', 'shear1', 'shear2']
+    cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols)
     N = 0 # init number of sightlines obtained so far
     sightlines = pd.DataFrame()
-    #while N < n_sightlines:
-    #    df = next(cosmodc2)
-    for df in cosmodc2:
+    while N < n_sightlines:
+        df = next(cosmodc2)
+    #for df in cosmodc2:
         high_z = df[(df['redshift']>2.0)].reset_index(drop=True)
         if high_z.shape[0] == 0:
             continue
         else:
             inside = fall_inside_bounds(high_z['ra'], high_z['dec'], **bounds)
             high_z = high_z[inside].reset_index(drop=True)
-            more_sightlines = high_z.sample(min(high_z.shape[0], n_sightlines//100))
-            N += n_sightlines//100
-            sightlines = pd.concat([sightlines, more_sightlines], ignore_index=True)
+            n_sample_per_chunk = min(max(n_sightlines//100, n_sightlines),
+                                     high_z.shape[0])
+            more_sightlines = high_z.sample(n_sample_per_chunk)
+            N += n_sample_per_chunk
+            sightlines = sightlines.append(more_sightlines, ignore_index=True)
     end = time.time()
-    print("Took {:f} seconds to get {:d} sightlines.".format(end-start, N))
-    sightlines.reset_index(drop=True).to_csv(out_path, index=None)
+    print("Took {:f} seconds to get {:d} sightline(s).".format(end-start, N))
+    sightlines.reset_index(drop=True, inplace=True)
+    sightlines.to_csv(out_path, index=None)
+    return sightlines
 
-def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, out_path):
-    halo_cols = ['baseDC2/target_halo_redshift',  'halo_mass', 'stellar_mass']
-    halo_cols += ['ra', 'dec',]
-    cosmodc2 = get_cosmodc2_generator(halo_cols)
+def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
+    halo_cols = ['halo_mass', 'stellar_mass']
+    halo_cols += ['ra', 'dec', 'baseDC2/target_halo_redshift']
+    cosmodc2 = get_cosmodc2_generator(healpix, halo_cols)
     halos = pd.DataFrame() # neighboring galaxies in LOS
     # Iterate through chunks to bin galaxies into the partitions
     for df in cosmodc2:
@@ -176,7 +208,6 @@ def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, out_path):
             halos = pd.concat([halos, lower_z[lower_z['dist'].values < fov*0.5]], ignore_index=True)
         else:
             break
-    halos.reset_index(drop=True)
     #####################
     # Define NFW kwargs #
     #####################
@@ -188,6 +219,7 @@ def get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, out_path):
                                   z_src)
     halos['Rs'] = Rs
     halos['alpha_Rs'] = alpha_Rs
+    halos.reset_index(drop=True, inplace=True)
     halos.to_csv(out_path, index=None)
     return halos
 
@@ -217,7 +249,20 @@ def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=No
     xx, yy = np.meshgrid(x_grid, y_grid)
     kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=1.0)
     np.save(save_path, kappa_map)
-    return kappa_map
+
+def get_gamma_maps(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
+    """Plot a map of gamma and save to disk
+
+    """
+    # 1 asec rez, in arcsec units
+    if x_grid is None:
+        x_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
+    if y_grid is None:
+        y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
+    xx, yy = np.meshgrid(x_grid, y_grid)
+    gamma1_map, gamma2_map = lens_model.gamma(xx, yy, nfw_kwargs, diff=1.0)
+    np.save(save_path[0], gamma1_map)
+    np.save(save_path[1], gamma2_map)
 
 def sample_in_aperture(N, radius):
     """Sample N points around a zero coordinate on the celestial sphere
@@ -305,7 +350,8 @@ def is_outlier(points, thresh=3):
     modified_z_score = 0.6745 * diff / med_abs_deviation
     return modified_z_score > thresh
 
-def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_kappa,
+def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov, 
+                              map_kappa, map_gamma,
                               n_kappa_samples, mass_cut, dest_dir):
     """Raytrace through a single sightline
 
@@ -314,7 +360,7 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
     if os.path.exists(halo_filename):
         halos = pd.read_csv(halo_filename, index_col=None)
     else:
-        halos = get_los_halos(ra_los, dec_los, z_src, wl_kappa, fov, mass_cut, halo_filename)    
+        halos = get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, halo_filename)    
     n_halos = halos.shape[0]
     # Instantiate multi-plane lens model
     lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
@@ -325,16 +371,25 @@ def raytrace_single_sightline(idx, ra_los, dec_los, z_src, wl_kappa, fov, map_ka
                            observed_convention_index=[])
     nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
     uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
-    uncalib_kappas_path = os.path.join(dest_dir, 'uncalib_kappas.txt') # FIXME
-    with open(uncalib_kappas_path, 'a') as f:
-        f.write("{:d},\t{:f}\n".format(idx, uncalib_kappa))
-
+    uncalib_gamma1, uncalib_gamma2 = lens_model.gamma(0.0, 0.0, nfw_kwargs, diff=1.0)
+    uncalib_path = os.path.join(dest_dir, 'uncalib.txt') # FIXME
+    with open(uncalib_path, 'a') as f:
+        f.write("{:d},\t{:f},\t{:f},\t{:f}\n".format(idx, 
+                                                     uncalib_kappa,
+                                                     uncalib_gamma1,
+                                                     uncalib_gamma2))
     if map_kappa:
         get_kappa_map(lens_model, nfw_kwargs, fov,
                       '{:s}/kappa_map_sightline={:d}.npy'.format(dest_dir, idx))
+    if map_gamma:
+        get_gamma_maps(lens_model, nfw_kwargs, fov,
+                      ('{:s}/gamma1_map_sightline={:d}.npy'.format(dest_dir, idx),
+                       '{:s}/gamma2_map_sightline={:d}.npy'.format(dest_dir, idx)))
+
     ################
     # Sample kappa #
     ################
+    # gamma1, gamma2 are not resampled due to symmetry around 0
     kappa_samples_path = '{:s}/kappa_samples_sightline={:d}.npy'.format(dest_dir, idx)
     if os.path.exists(kappa_samples_path):
         pass

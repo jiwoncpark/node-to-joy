@@ -19,15 +19,17 @@ import multiprocessing
 from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
 get_sightlines_random)
 
-def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, mass_cut, dest_dir):
+def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
+                    n_kappa_samples, mass_cut, dest_dir):
     """Wrapper around `raytrace_single_sightline` to enable multiprocessing"""
     sightline = sightlines.iloc[i]
     raytrace_single_sightline(i, 
+                              healpix,
                               sightline['ra'], sightline['dec'],
                               sightline['redshift'], 
-                              sightline['convergence'],
                               fov,
                               map_kappa,
+                              map_gamma,
                               n_kappa_samples,
                               mass_cut,
                               dest_dir)
@@ -35,7 +37,8 @@ def single_raytrace(i, sightlines, fov, map_kappa, n_kappa_samples, mass_cut, de
 
 class Sightlines:
     """Set of sightlines in a cosmoDC2 field"""
-    def __init__(self, dest_dir, fov, map_kappa, mass_cut=11, n_sightlines=1000):
+    def __init__(self, dest_dir, fov, map_kappa, map_gamma, 
+                 mass_cut=11, n_sightlines=1000):
         """
         Parameters
         ----------
@@ -53,11 +56,13 @@ class Sightlines:
         self.dest_dir = dest_dir
         self.fov = fov
         self.map_kappa = map_kappa
+        self.map_gamma = map_gamma
         self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
+        self.healpix = 10450
         self._get_pointings()
-        self.uncalib_kappa_path = os.path.join(self.dest_dir, 'uncalib_kappas.txt')
-        open(self.uncalib_kappa_path, 'a').close()
+        self.uncalib_path = os.path.join(self.dest_dir, 'uncalib.txt')
+        open(self.uncalib_path, 'a').close()
         
     def _get_pointings(self):
         sightlines_path = '{:s}/random_sightlines.csv'.format(self.dest_dir)
@@ -66,15 +71,18 @@ class Sightlines:
                                          index_col=None,
                                          nrows=self.n_sightlines)
         else:
-            self.pointings = get_sightlines_random(self.n_sightlines, 
+            self.pointings = get_sightlines_random(self.healpix,
+                                                   self.n_sightlines, 
                                                    sightlines_path,
                                                    edge_buffer=self.fov*0.5)
 
     def parallel_raytrace(self):
         single = functools.partial(single_raytrace, 
+                                   healpix=self.healpix,
                                    sightlines=self.pointings, 
                                    fov=self.fov, 
                                    map_kappa=self.map_kappa, 
+                                   map_gamma=self.map_gamma,
                                    n_kappa_samples=1000,
                                    mass_cut=self.mass_cut,
                                    dest_dir=self.dest_dir)
@@ -85,6 +93,9 @@ class Sightlines:
 if __name__ == '__main__':
     #get_sightlines()
     #
+    #import cProfile
+    #pr = cProfile.Profile()
+    #pr.enable()
     parser = argparse.ArgumentParser()
     parser.add_argument('dest_dir',
                         help='destination folder for the kappa maps, samples')
@@ -92,15 +103,19 @@ if __name__ == '__main__':
                         help='field of view in arcmin (Default: 6.0)')
     parser.add_argument('--map_kappa', default=False, dest='map_kappa', type=bool,
                         help='whether to generate grid maps of kappa (Default: False)')
+    parser.add_argument('--map_gamma', default=False, dest='map_gamma', type=bool,
+                        help='whether to generate grid maps of gamma (Default: False)')
     parser.add_argument('--n_sightlines', default=1000, dest='n_sightlines', type=int,
                         help='number of sightlines to raytrace through (Default: 1000)')
     parser.add_argument('--mass_cut', default=11.0, dest='mass_cut', type=float,
                         help='log10(minimum halo mass) (Default: 11.0)')
     args = parser.parse_args()
 
-    with multiprocessing.Pool(multiprocessing.cpu_count() - 1) as pool:
+    n_cores = min(multiprocessing.cpu_count() - 1, args.n_sightlines)
+    with multiprocessing.Pool(n_cores) as pool:
         Sightlines(**vars(args)).parallel_raytrace()
-
+    #pr.disable()
+    #pr.print_stats(sort='cumtime')
     #for i in tqdm(range(n_sightlines), desc="Raytracing through each sightline"):
     #    
     #raytrace(fov=6.0, map_kappa=True, n_sightlines=1, n_kappa_samples=5)
