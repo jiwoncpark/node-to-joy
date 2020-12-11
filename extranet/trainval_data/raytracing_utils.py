@@ -385,15 +385,17 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
     ################
     # gamma1, gamma2 are not resampled due to symmetry around 0
     kappa_samples_path = '{:s}/kappa_samples_sightline={:d}.npy'.format(dest_dir, idx)
+    new_ra, new_dec = sample_in_aperture(n_halos*n_kappa_samples, fov*0.5/60.0)
+    new_ra *= 3600.0 # deg to arcsec
+    new_dec *= 3600.0 # deg to arcsec
     if os.path.exists(kappa_samples_path):
         pass
     else:
         kappa_samples = np.empty(n_kappa_samples)
         S = 0
         while S < n_kappa_samples:
-            new_ra, new_dec = sample_in_aperture(n_halos, fov*0.5/60.0)
-            halos['center_x'] = new_ra*3600.0 # deg to arcsec
-            halos['center_y'] = new_dec*3600.0 # deg to arcsec
+            halos['center_x'] = new_ra[n_halos*S:n_halos*(S+1)]
+            halos['center_y'] = new_dec[n_halos*S:n_halos*(S+1)]
             nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
             resampled_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
             if resampled_kappa < 1.0:
