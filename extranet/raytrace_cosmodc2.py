@@ -26,7 +26,7 @@ def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
     raytrace_single_sightline(i, 
                               healpix,
                               sightline['ra'], sightline['dec'],
-                              sightline['redshift'], 
+                              sightline['gal_z'], 
                               fov,
                               map_kappa,
                               map_gamma,
@@ -37,7 +37,7 @@ def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
 
 class Sightlines:
     """Set of sightlines in a cosmoDC2 field"""
-    def __init__(self, dest_dir, fov, map_kappa, map_gamma, 
+    def __init__(self, dest_dir, fov, map_kappa, map_gamma, one_sightline,
                  mass_cut=11, n_sightlines=1000):
         """
         Parameters
@@ -57,6 +57,7 @@ class Sightlines:
         self.fov = fov
         self.map_kappa = map_kappa
         self.map_gamma = map_gamma
+        self.one_sightline = one_sightline # FIXME
         self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
         self.healpix = 10450
@@ -108,7 +109,9 @@ if __name__ == '__main__':
     parser.add_argument('--n_sightlines', default=1000, dest='n_sightlines', type=int,
                         help='number of sightlines to raytrace through (Default: 1000)')
     parser.add_argument('--mass_cut', default=11.0, dest='mass_cut', type=float,
-                        help='log10(minimum halo mass) (Default: 11.0)')
+                        help='log10(minimum halo mass/solar) (Default: 11.0)')
+    parser.add_argument('--one_sightline', default=None, dest='one_sightline', type=int,
+                        help='index of a single sightline to run')
     args = parser.parse_args()
 
     n_cores = min(multiprocessing.cpu_count() - 1, args.n_sightlines)

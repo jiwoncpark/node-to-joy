@@ -93,13 +93,13 @@ class TestRaytracingUtils(unittest.TestCase):
         halos = pd.DataFrame({
                              'halo_mass': self.halo_mass,
                              'stellar_mass': self.stellar_mass,
-                             'baseDC2/target_halo_redshift': self.halo_z,
+                             'halo_z': self.halo_z,
                              'center_x': self.halo_ra*3600.0,
                              'center_y': self.halo_dec*3600.0,
                              })
         Rs, alpha_Rs = ray_util.get_nfw_kwargs(halos['halo_mass'], 
                                                halos['stellar_mass'],
-                                               halos['baseDC2/target_halo_redshift'],
+                                               halos['halo_z'],
                                                self.z_src)
         halos['Rs'] = Rs
         halos['alpha_Rs'] = alpha_Rs

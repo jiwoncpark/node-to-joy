@@ -45,6 +45,17 @@ def get_prestored_healpix_bounds(healpix):
         else:
             return None
 
+def rename_cosmodc2_cols(df):
+    """Rename cosmoDC2-specific columns to mroe general ones
+
+    """
+    from extranet import trainval_data 
+    meta_path = os.path.join(trainval_data.__path__[0], 'catalog_metadata.yaml')
+    with open(meta_path) as file:
+        meta = yaml.load(file, Loader=yaml.FullLoader)
+        column_names = meta['cosmodc2']['column_names']
+    df.rename(columns=column_names, inplace=True)
+
 def buffer_bounds(min_ra, max_ra, min_dec, max_dec, edge_buffer):
     """Buffer the bounds
 
@@ -159,7 +170,8 @@ def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
     """
     start = time.time()
     bounds = get_healpix_bounds(healpix, edge_buffer=edge_buffer/60.0)
-    sightline_cols = ['ra', 'dec', 'redshift', 'convergence', 'shear1', 'shear2']
+    sightline_cols = ['ra_true', 'dec_true', 'redshift']
+    sightline_cols += ['convergence', 'shear1', 'shear2']
     cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols)
     N = 0 # init number of sightlines obtained so far
     sightlines = pd.DataFrame()
@@ -170,7 +182,7 @@ def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
         if high_z.shape[0] == 0:
             continue
         else:
-            inside = fall_inside_bounds(high_z['ra'], high_z['dec'], **bounds)
+            inside = fall_inside_bounds(high_z['ra_true'], high_z['dec_true'], **bounds)
             high_z = high_z[inside].reset_index(drop=True)
             n_sample_per_chunk = min(max(n_sightlines//100, n_sightlines),
                                      high_z.shape[0])
@@ -180,32 +192,36 @@ def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
     end = time.time()
     print("Took {:f} seconds to get {:d} sightline(s).".format(end-start, N))
     sightlines.reset_index(drop=True, inplace=True)
+    rename_cosmodc2_cols(sightlines)
     sightlines.to_csv(out_path, index=None)
     return sightlines
 
 def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
-    halo_cols = ['halo_mass', 'stellar_mass']
-    halo_cols += ['ra', 'dec', 'baseDC2/target_halo_redshift']
+    halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
+    halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
     cosmodc2 = get_cosmodc2_generator(healpix, halo_cols)
     halos = pd.DataFrame() # neighboring galaxies in LOS
     # Iterate through chunks to bin galaxies into the partitions
     for df in cosmodc2:
         # Get galaxies in the aperture and in foreground of source
         # Discard smaller masses, since they won't have a big impact anyway
-        massive = df[df['halo_mass'] > 10.0**mass_cut].reset_index(drop=True)
-        lower_z = massive[massive['baseDC2/target_halo_redshift']<z_src].reset_index(drop=True)
-        if len(lower_z) > 0:
+        mass_cut = df['halo_mass'].values > 10.0**mass_cut
+        lower_z_cut = df['baseDC2/target_halo_redshift'].values < z_src
+        central_only = df['is_central'].values == True
+        cut = np.logical_and(np.logical_and(mass_cut, lower_z_cut), central_only)
+        df = df[cut].reset_index(drop=True)
+        if len(df) > 0:
             d, ra_diff, dec_diff = get_distance(
-                                               ra_f=lower_z['ra'].values,
-                                               dec_f=lower_z['dec'].values,
+                                               ra_f=df['ra_true'].values,
+                                               dec_f=df['dec_true'].values,
                                                ra_i=ra_los,
                                                dec_i=dec_los
                                                )
-            lower_z['dist'] = d*60.0 # deg to arcmin
-            lower_z['ra_diff'] = ra_diff # deg
-            lower_z['dec_diff'] = dec_diff # deg
-            lower_z = lower_z[lower_z['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
-            halos = pd.concat([halos, lower_z[lower_z['dist'].values < fov*0.5]], ignore_index=True)
+            df['dist'] = d*60.0 # deg to arcmin
+            df['ra_diff'] = ra_diff # deg
+            df['dec_diff'] = dec_diff # deg
+            df = df[df['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
+            halos = halos.append(df[df['dist'].values < fov*0.5], ignore_index=True)
         else:
             break
     #####################
@@ -220,6 +236,7 @@ def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
     halos['Rs'] = Rs
     halos['alpha_Rs'] = alpha_Rs
     halos.reset_index(drop=True, inplace=True)
+    rename_cosmodc2_cols(halos)
     halos.to_csv(out_path, index=None)
     return halos
 
@@ -359,7 +376,7 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
     # Instantiate multi-plane lens model
     lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
                            z_source=z_src, 
-                           lens_redshift_list=halos['baseDC2/target_halo_redshift'].values, 
+                           lens_redshift_list=halos['halo_z'].values, 
                            multi_plane=True,
                            cosmo=WMAP7,
                            observed_convention_index=[])
