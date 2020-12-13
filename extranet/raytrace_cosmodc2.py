@@ -115,8 +115,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     n_cores = min(multiprocessing.cpu_count() - 1, args.n_sightlines)
+    sightlines = Sightlines(**vars(args))
     with multiprocessing.Pool(n_cores) as pool:
-        Sightlines(**vars(args)).parallel_raytrace()
+        sightlines.parallel_raytrace()
     #pr.disable()
     #pr.print_stats(sort='cumtime')
     #for i in tqdm(range(n_sightlines), desc="Raytracing through each sightline"):
