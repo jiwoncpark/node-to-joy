@@ -54,6 +54,8 @@ class Sightlines:
 
         """
         self.dest_dir = dest_dir
+        if not os.path.exists(self.dest_dir):
+            os.mkdir(self.dest_dir)
         self.fov = fov
         self.map_kappa = map_kappa
         self.map_gamma = map_gamma
