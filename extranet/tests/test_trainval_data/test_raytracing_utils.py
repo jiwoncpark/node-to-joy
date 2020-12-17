@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import shutil
 import pandas as pd
-from extranet.trainval_data import raytracing_utils as ray_util
+from extranet.trainval_data import raytracing_utils as ru
 
 class TestRaytracingUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods
@@ -25,20 +25,48 @@ class TestRaytracingUtils(unittest.TestCase):
         cls.halo_dec = np.array([1.0, 0.5, 2.0])/60.0 # deg
 
     def test_get_healpix_bounds(self):
-        bounds = ray_util.get_healpix_bounds(self.healpix, edge_buffer=3.0/60.0)
+        bounds = ru.get_healpix_bounds(self.healpix, edge_buffer=3.0/60.0)
         assert bounds['min_ra'] < bounds['max_ra']
         assert bounds['min_dec'] < bounds['max_dec']
 
     def test_get_prestored_healpix_bounds(self):
-        bounds = ray_util.get_prestored_healpix_bounds(self.healpix)
+        bounds = ru.get_prestored_healpix_bounds(self.healpix)
         assert bounds['min_ra'] < bounds['max_ra']
         assert bounds['min_dec'] < bounds['max_dec']
+
+    def test_get_los_halos_mass_dist_cut(self):
+        """Test if the `get_los_halos` method applies the correct mass and 
+        position cuts
+
+        """
+        # Prepare input dataframe generator
+        test_cosmodc2_path = os.path.join(self.out_dir, 'cosmodc2.csv')
+        halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
+        halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
+        df = pd.DataFrame({
+                         'halo_mass': 10.0**np.array([10, 10.5, 11.1, 11.5, 12]),
+                         'stellar_mass': 10.0**np.array([10, 10, 10, 10, 10]),
+                         'is_central': [True]*5,
+                         'ra_true': np.array([1, 1, 1, 1, 2])/60.0, # deg
+                         'dec_true': np.array([1, 1, 1, 1, 2])/60.0, # deg
+                         'baseDC2/target_halo_redshift': [1.0]*5})
+        df.to_csv(test_cosmodc2_path, index=None)
+        df_gen = pd.read_csv(test_cosmodc2_path, index_col=None, chunksize=2)
+        # Generate halos
+        test_halos_path = os.path.join(self.out_dir, 'halos.csv')
+        halos = ru.get_los_halos(df_gen, 
+                                 ra_los=0.0, dec_los=0.0, 
+                                 z_src=self.z_src, 
+                                 fov=6.0, 
+                                 mass_cut=11.0, 
+                                 out_path=test_halos_path)
+        assert halos.shape[0] == 3
 
     def test_get_sightlines_random(self):
         # Test number of sightlines
         for N in [1, 1001]:
             out_path = os.path.join(self.out_dir, 'random_sightlines.csv')
-            ray_util.get_sightlines_random(self.healpix, N, out_path)
+            ru.get_sightlines_random(self.healpix, N, out_path)
             df = pd.read_csv(out_path, index_col=None)
             assert df.shape[0] == N
 
@@ -50,7 +78,7 @@ class TestRaytracingUtils(unittest.TestCase):
         def get_nfw_kwargs_loop(halo_mass, stellar_mass, halo_z, z_src):
             from lenstronomy.Cosmo.lens_cosmo import LensCosmo
             from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
-            c_200 = ray_util.get_concentration(halo_mass, stellar_mass)
+            c_200 = ru.get_concentration(halo_mass, stellar_mass)
             n_halos = len(halo_mass)
             halo_Rs, halo_alpha_Rs = np.empty(n_halos), np.empty(n_halos)
             for halo_i in range(n_halos):
@@ -70,7 +98,7 @@ class TestRaytracingUtils(unittest.TestCase):
                                            self.halo_z, 
                                            self.z_src)
         np.random.seed(123)
-        Rs_vec, alpha_Rs_vec = ray_util.get_nfw_kwargs(self.halo_mass, 
+        Rs_vec, alpha_Rs_vec = ru.get_nfw_kwargs(self.halo_mass, 
                                                        self.stellar_mass, 
                                                        self.halo_z, 
                                                        self.z_src)
@@ -97,7 +125,7 @@ class TestRaytracingUtils(unittest.TestCase):
                              'center_x': self.halo_ra*3600.0,
                              'center_y': self.halo_dec*3600.0,
                              })
-        Rs, alpha_Rs = ray_util.get_nfw_kwargs(halos['halo_mass'], 
+        Rs, alpha_Rs = ru.get_nfw_kwargs(halos['halo_mass'], 
                                                halos['stellar_mass'],
                                                halos['halo_z'],
                                                self.z_src)
@@ -105,7 +133,7 @@ class TestRaytracingUtils(unittest.TestCase):
         halos['alpha_Rs'] = alpha_Rs
         halos.reset_index(drop=True, inplace=True)
         halos.to_csv(halo_path, index=None)
-        ray_util.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los, 
+        ru.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los, 
                                            z_src, fov, False, False,
                                            n_kappa_samples, mass_cut, 
                                            self.out_dir)

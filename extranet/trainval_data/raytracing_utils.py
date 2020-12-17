@@ -10,6 +10,7 @@ from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 #from lenstronomy.LensModel.Profiles.nfw import NFW
 from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
 
+kappa_diff = 1.0
 __all__ = ['get_cosmodc2_generator', 'get_healpix_bounds', 'fall_inside_bounds']
 __all__ += ['get_sightlines_on_grid', 'get_sightlines_random']
 __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
@@ -196,19 +197,20 @@ def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
     sightlines.to_csv(out_path, index=None)
     return sightlines
 
-def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
-    halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
-    halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
-    cosmodc2 = get_cosmodc2_generator(healpix, halo_cols)
+def get_los_halos(generator, ra_los, dec_los, z_src, fov, mass_cut, out_path):
     halos = pd.DataFrame() # neighboring galaxies in LOS
     # Iterate through chunks to bin galaxies into the partitions
-    for df in cosmodc2:
+    for df in generator:
         # Get galaxies in the aperture and in foreground of source
         # Discard smaller masses, since they won't have a big impact anyway
-        mass_cut = df['halo_mass'].values > 10.0**mass_cut
-        lower_z_cut = df['baseDC2/target_halo_redshift'].values < z_src
-        central_only = df['is_central'].values == True
-        cut = np.logical_and(np.logical_and(mass_cut, lower_z_cut), central_only)
+        lower_z = df['baseDC2/target_halo_redshift'].values < z_src
+        if lower_z.any(): # there are still some lower-z halos
+            pass
+        else: # z started getting too high, no need to continue
+            break
+        high_mass = df['halo_mass'].values > 10.0**mass_cut
+        central_only = (df['is_central'].values == True)
+        cut = np.logical_and(np.logical_and(high_mass, lower_z), central_only)
         df = df[cut].reset_index(drop=True)
         if len(df) > 0:
             d, ra_diff, dec_diff = get_distance(
@@ -220,21 +222,23 @@ def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
             df['dist'] = d*60.0 # deg to arcmin
             df['ra_diff'] = ra_diff # deg
             df['dec_diff'] = dec_diff # deg
-            df = df[df['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
+            #df = df[df['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
             halos = halos.append(df[df['dist'].values < fov*0.5], ignore_index=True)
         else:
-            break
+            continue
+
     #####################
     # Define NFW kwargs #
     #####################
     halos['center_x'] = halos['ra_diff']*3600.0 # deg to arcsec
     halos['center_y'] = halos['dec_diff']*3600.0
-    Rs, alpha_Rs = get_nfw_kwargs(halos['halo_mass'].values, 
+    Rs, alpha_Rs, eff = get_nfw_kwargs(halos['halo_mass'].values, 
                                   halos['stellar_mass'].values,
                                   halos['baseDC2/target_halo_redshift'].values,
                                   z_src)
     halos['Rs'] = Rs
     halos['alpha_Rs'] = alpha_Rs
+    halos['eff'] = eff
     halos.reset_index(drop=True, inplace=True)
     rename_cosmodc2_cols(halos)
     halos.to_csv(out_path, index=None)
@@ -243,10 +247,11 @@ def get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, out_path):
 def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     c_200 = get_concentration(halo_mass, stellar_mass)
     lens_cosmo = LensCosmo(z_lens=halo_z, z_source=z_src, cosmo=WMAP7)
+    lensing_eff = lens_cosmo.dds/lens_cosmo.ds
     Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass, c=c_200)
     rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
                                                             alpha_Rs=alpha_Rs)
-    return Rs, alpha_Rs
+    return Rs, alpha_Rs, lensing_eff
 
 def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
     """Plot a map of kappa and save to disk
@@ -258,7 +263,7 @@ def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=No
     if y_grid is None:
         y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
     xx, yy = np.meshgrid(x_grid, y_grid)
-    kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=1.0)
+    kappa_map = lens_model.kappa(xx, yy, nfw_kwargs, diff=kappa_diff)
     np.save(save_path, kappa_map)
 
 def get_gamma_maps(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
@@ -271,7 +276,7 @@ def get_gamma_maps(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=N
     if y_grid is None:
         y_grid = np.arange(-fov*0.5, fov*0.5, 1/60.0)*60.0 # 1 asec rez, in arcsec units
     xx, yy = np.meshgrid(x_grid, y_grid)
-    gamma1_map, gamma2_map = lens_model.gamma(xx, yy, nfw_kwargs, diff=1.0)
+    gamma1_map, gamma2_map = lens_model.gamma(xx, yy, nfw_kwargs, diff=kappa_diff)
     np.save(save_path[0], gamma1_map)
     np.save(save_path[1], gamma2_map)
 
@@ -371,7 +376,10 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
     if os.path.exists(halo_filename):
         halos = pd.read_csv(halo_filename, index_col=None)
     else:
-        halos = get_los_halos(healpix, ra_los, dec_los, z_src, fov, mass_cut, halo_filename)    
+        halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
+        halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
+        cosmodc2 = get_cosmodc2_generator(healpix, halo_cols)
+        halos = get_los_halos(cosmodc2, ra_los, dec_los, z_src, fov, mass_cut, halo_filename)    
     n_halos = halos.shape[0]
     # Instantiate multi-plane lens model
     lens_model = LensModel(lens_model_list=['NFW']*n_halos, 
@@ -381,8 +389,8 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
                            cosmo=WMAP7,
                            observed_convention_index=[])
     nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-    uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
-    uncalib_gamma1, uncalib_gamma2 = lens_model.gamma(0.0, 0.0, nfw_kwargs, diff=1.0)
+    uncalib_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=kappa_diff)
+    uncalib_gamma1, uncalib_gamma2 = lens_model.gamma(0.0, 0.0, nfw_kwargs, diff=kappa_diff)
     uncalib_path = os.path.join(dest_dir, 'uncalib.txt') # FIXME
     with open(uncalib_path, 'a') as f:
         f.write("{:d},\t{:f},\t{:f},\t{:f}\n".format(idx, 
@@ -416,7 +424,7 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
             #halos['center_x'] = new_ra[n_halos*S:n_halos*(S+1)]
             #halos['center_y'] = new_dec[n_halos*S:n_halos*(S+1)]
             nfw_kwargs = halos[['Rs', 'alpha_Rs', 'center_x', 'center_y']].to_dict('records')
-            resampled_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=1.0)
+            resampled_kappa = lens_model.kappa(0.0, 0.0, nfw_kwargs, diff=kappa_diff)
             if resampled_kappa < 1.0:
                 kappa_samples[S] = resampled_kappa
                 S += 1
