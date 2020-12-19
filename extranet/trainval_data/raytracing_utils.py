@@ -21,7 +21,10 @@ def get_cosmodc2_generator(healpix, columns=None, chunksize=100000):
     """Get a generator of cosmoDC2, too big to store in memory at once
 
     """
-    cosmodc2_path = 'data/cosmodc2_train/raw/cosmodc2_trainval_{:d}.csv'.format(healpix)
+    from extranet import data 
+    cosmodc2_path = os.path.join(data.__path__[0], 
+                                 'cosmodc2_train', 'raw',
+                                 'cosmodc2_trainval_{:d}.csv'.format(healpix))
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=None,
                            usecols=columns)
     return cosmodc2
