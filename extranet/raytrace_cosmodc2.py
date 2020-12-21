@@ -17,7 +17,7 @@ import pandas as pd
 from tqdm import tqdm
 import multiprocessing
 from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
-get_sightlines_random)
+get_sightlines_on_grid)
 
 def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
                     n_kappa_samples, mass_cut, dest_dir):
@@ -68,16 +68,15 @@ class Sightlines:
         open(self.uncalib_path, 'a').close()
         
     def _get_pointings(self):
-        sightlines_path = '{:s}/random_sightlines.csv'.format(self.dest_dir)
+        sightlines_path = '{:s}/sightlines.csv'.format(self.dest_dir)
         if os.path.exists(sightlines_path):
             self.pointings = pd.read_csv(sightlines_path, 
                                          index_col=None,
                                          nrows=self.n_sightlines)
         else:
-            self.pointings = get_sightlines_random(self.healpix,
+            self.pointings = get_sightlines_on_grid(self.healpix,
                                                    self.n_sightlines, 
-                                                   sightlines_path,
-                                                   edge_buffer=self.fov*0.5)
+                                                   sightlines_path)
 
     def parallel_raytrace(self):
         single = functools.partial(single_raytrace, 

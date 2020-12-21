@@ -9,10 +9,11 @@ from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 #from lenstronomy.LensModel.Profiles.nfw import NFW
 from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
+import extranet.trainval_data.coord_utils as cu
 
 kappa_diff = 1.0
 __all__ = ['get_cosmodc2_generator', 'get_healpix_bounds', 'fall_inside_bounds']
-__all__ += ['get_sightlines_on_grid', 'get_sightlines_random']
+__all__ += ['get_sightlines_on_grid']
 __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
 __all__ += ['sample_in_aperture', 'get_distance', 'get_concentration']
 __all__ += ['is_outlier', 'raytrace_single_sightline']
@@ -104,7 +105,7 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
-def get_sightlines_on_grid(healpix, edge_buffer=3.0, grid_size=15.0):
+def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     """Get the sightlines
     
     Parameters
@@ -127,74 +128,30 @@ def get_sightlines_on_grid(healpix, edge_buffer=3.0, grid_size=15.0):
     # galaxy closest to each grid center at redshift z > 2
     # Each partition, centered at that galaxy, 
     # corresponds to a line of sight (LOS)
-    bounds = get_healpix_bounds(healpix)
-    ra_grid = np.arange(bounds['min_ra'], bounds['max_ra'], grid_size) + grid_size*0.5 # arcmin
-    dec_grid = np.arange(bounds['min_dec'], bounds['max_dec'], grid_size) + grid_size*0.5 # arcmin
-    grid_center = list(itertools.product(ra_grid, dec_grid))
-    print(len(grid_center))
-    sightlines = []
-    for (r, d) in tqdm(grid_center, desc='Finding sightlines'):
-        cosmodc2 = get_cosmodc2_generator(healpix)
-        min_dist = np.inf # init distance of halo closest to g
-        sightline = None
-        for df in cosmodc2:
-            #df['is_central'] = True 
-            high_z = df[(df['redshift']>2.0)].reset_index(drop=True) # FIXME: use redshift_true
-            if len(high_z) > 0:
-                eps, _, _ = get_distance(
-                                       ra_f=high_z['ra'].values,
-                                       dec_f=high_z['dec'].values,
-                                       ra_i=r/60.0, # deg
-                                       dec_i=d/60.0 # deg
-                                       )
-                high_z['eps'] = eps*60.0 # deg to arcmin
-                if high_z['eps'].min() < min_dist:
-                    min_dist = high_z['eps'].min()
-                    sightline = high_z.iloc[np.argmin(high_z['eps'].values)] # closest to g
-        if sightline is not None:
-            sightlines.append((sightline['ra'], sightline['dec'], sightline['redshift'], sightline['eps'], sightline['convergence'], sightline['shear1'], sightline['shear2']))
-    print(len(sightlines))
-    print("Sightlines: ", sightlines[4])
-    print("Grids: ", list(grid_center)[4])
-    np.save('sightlines.npy', sightlines)
-
-def get_sightlines_random(healpix, n_sightlines, out_path, edge_buffer=3.0):
-    """Get the sightlines
-    
-    Parameters
-    ----------
-    edge_buffer : float
-        buffer for the edge of healpix, in arcmin
-
-    Notes
-    -----
-    Currently takes ~1 min for 1,000 sightlines. Will preferentially select
-    lower-z galaxies 
-
-    """
-    start = time.time()
-    bounds = get_healpix_bounds(healpix, edge_buffer=edge_buffer/60.0)
+    target_nside = cu.get_target_nside(n_sightlines, nside_in=2**5)
+    sightline_ids = cu.upgrade_healpix(healpix, False, 2**5, target_nside)
+    ra_grid, dec_grid = cu.get_healpix_centers(sightline_ids, target_nside, nest=True)
+    close_enough = np.zeros_like(ra_grid).astype(bool) # all gridpoints False
+    dist_thres = 6.0/3600.0 # matching threshold, in deg
     sightline_cols = ['ra_true', 'dec_true', 'redshift']
     sightline_cols += ['convergence', 'shear1', 'shear2']
     cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols)
-    N = 0 # init number of sightlines obtained so far
-    sightlines = pd.DataFrame()
-    while N < n_sightlines:
+    gridpoints = cu.get_skycoord(ra_grid, dec_grid)
+    sightlines = pd.DataFrame() # init running dataframe
+    while np.all(close_enough) == False:
         df = next(cosmodc2)
-    #for df in cosmodc2:
-        high_z = df[(df['redshift']>2.0)].reset_index(drop=True)
-        if high_z.shape[0] == 0:
-            continue
-        else:
-            inside = fall_inside_bounds(high_z['ra_true'], high_z['dec_true'], **bounds)
-            high_z = high_z[inside].reset_index(drop=True)
-            n_sample_per_chunk = min(max(n_sightlines//100, n_sightlines),
-                                     high_z.shape[0])
-            more_sightlines = high_z.sample(n_sample_per_chunk)
-            N += n_sample_per_chunk
+        # FIXME: use redshift_true
+        high_z = df[(df['redshift']>2.0)].reset_index(drop=True) 
+        if len(high_z) > 0:
+            sub_catalog = cu.get_skycoord(high_z['ra_true'].values, 
+                                             high_z['dec_true'].values)
+            idx, dist, _ = gridpoints.match_to_catalog_sky(sub_catalog)
+            passing_crit = dist<dist_thres
+            passing = idx[passing_crit]
+            close_enough[passing] = True
+            more_sightlines = high_z.iloc[passing]
+            more_sightlines['eps'] = dist[passing_crit]
             sightlines = sightlines.append(more_sightlines, ignore_index=True)
-    end = time.time()
-    print("Took {:f} seconds to get {:d} sightline(s).".format(end-start, N))
     sightlines.reset_index(drop=True, inplace=True)
     rename_cosmodc2_cols(sightlines)
     sightlines.to_csv(out_path, index=None)
