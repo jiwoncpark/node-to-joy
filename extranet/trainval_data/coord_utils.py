@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import healpy as hp
 from astropy.coordinates import SkyCoord
@@ -27,7 +28,8 @@ def upgrade_healpix(pix_id, nested, nside_in, nside_out):
         pix_id = hp.ring2nest(nside_in, pix_id)
     order_diff = np.log2(nside_out) - np.log2(nside_in)
     factor = 4**order_diff
-    return pix_id*factor + np.arange(factor)
+    upgraded_ids = pix_id*factor + np.arange(factor)
+    return upgraded_ids.astype(int)
 
 def get_healpix_centers(pix_id, nside, nest):
     """Get the ra, dec corresponding to centers of the healpixels with given IDs
@@ -69,11 +71,29 @@ def get_target_nside(n_pix, nside_in=2**5):
 
     """
     order_in = int(np.log2(nside_in))
-    order_diff_grid = np.arange(1, 12)
-    factor_grid = 4**order_diff_grid
-    closest_n_pix_i = np.argmin(np.abs(n_pix - factor_grid))
-    order_diff = order_diff_grid[closest_n_pix_i]
+    order_diff = math.ceil(np.log(n_pix)/np.log(4.0)) # round up log4(n_pix)
     order_out = order_diff + order_in
     nside_out = int(2**order_out)
     return nside_out
 
+def match(ra_cat, dec_cat, gridpoints, threshold):
+    """Match gridpoints to a catalog based on distance threshold
+
+    Parameters
+    ----------
+    ra_cat : np.array
+    dec_cat : np.array
+    gridpoints : astropy.SkyCoord instance
+    threshold : float
+        matching distance threshold in deg
+
+    """
+    n_grid = gridpoints.shape[0]
+    sub_catalog = get_skycoord(ra_cat, dec_cat)
+    # idx returned is wrt catalog
+    idx_cat, dist, _ = gridpoints.match_to_catalog_sky(sub_catalog)
+    passing_crit = dist<threshold*u.degree
+    passing_i_grid = np.arange(n_grid)[passing_crit] # idx wrt the gridpoints
+    passing_i_cat = idx_cat[passing_crit]
+    passing_dist = dist.value[passing_crit]
+    return passing_i_grid, passing_i_cat, passing_dist

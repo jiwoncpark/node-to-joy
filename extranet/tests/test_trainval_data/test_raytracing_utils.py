@@ -62,13 +62,15 @@ class TestRaytracingUtils(unittest.TestCase):
                                  out_path=test_halos_path)
         assert halos.shape[0] == 3
 
-    def test_get_sightlines_random(self):
-        # Test number of sightlines
-        for N in [1, 1001]:
-            out_path = os.path.join(self.out_dir, 'random_sightlines.csv')
-            ru.get_sightlines_random(self.healpix, N, out_path)
-            df = pd.read_csv(out_path, index_col=None)
-            assert df.shape[0] == N
+    def test_get_sightlines_on_grid(self):
+        """Test number of sightlines and errorless execution
+
+        """
+        np.random.seed(123)
+        N = 1000 
+        out_path = os.path.join(self.out_dir, 'sightlines.csv')
+        sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path)
+        assert sightlines.shape[0] == N
 
     def test_get_nfw_kwargs(self):
         """Test if the vectorization across halos returns the same values
@@ -98,10 +100,10 @@ class TestRaytracingUtils(unittest.TestCase):
                                            self.halo_z, 
                                            self.z_src)
         np.random.seed(123)
-        Rs_vec, alpha_Rs_vec = ru.get_nfw_kwargs(self.halo_mass, 
-                                                       self.stellar_mass, 
-                                                       self.halo_z, 
-                                                       self.z_src)
+        Rs_vec, alpha_Rs_vec, lensing_eff = ru.get_nfw_kwargs(self.halo_mass, 
+                                                              self.stellar_mass, 
+                                                              self.halo_z, 
+                                                              self.z_src)
         np.testing.assert_array_almost_equal(Rs_vec, Rs)
         np.testing.assert_array_almost_equal(alpha_Rs_vec, alpha_Rs)
 
@@ -125,10 +127,10 @@ class TestRaytracingUtils(unittest.TestCase):
                              'center_x': self.halo_ra*3600.0,
                              'center_y': self.halo_dec*3600.0,
                              })
-        Rs, alpha_Rs = ru.get_nfw_kwargs(halos['halo_mass'], 
-                                               halos['stellar_mass'],
-                                               halos['halo_z'],
-                                               self.z_src)
+        Rs, alpha_Rs, lensing_eff = ru.get_nfw_kwargs(halos['halo_mass'], 
+                                                      halos['stellar_mass'],
+                                                      halos['halo_z'],
+                                                      self.z_src)
         halos['Rs'] = Rs
         halos['alpha_Rs'] = alpha_Rs
         halos.reset_index(drop=True, inplace=True)

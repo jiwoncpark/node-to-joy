@@ -105,15 +105,19 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
+
+
 def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     """Get the sightlines
     
     Parameters
     ----------
-    edge_buffer : float
-        buffer for the edge of healpix
-    grid_size : float
-        size of each grid in arcmin
+    healpix : int
+        healpix ID that will be supersampled
+    n_sightlines : int
+        desired number of sightlines
+    out_path : str or os.path instance
+        where the output file `sightlines.csv` will be stored
 
     Notes
     -----
@@ -128,9 +132,13 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     # galaxy closest to each grid center at redshift z > 2
     # Each partition, centered at that galaxy, 
     # corresponds to a line of sight (LOS)
+    start = time.time()
     target_nside = cu.get_target_nside(n_sightlines, nside_in=2**5)
     sightline_ids = cu.upgrade_healpix(healpix, False, 2**5, target_nside)
     ra_grid, dec_grid = cu.get_healpix_centers(sightline_ids, target_nside, nest=True)
+    # Randomly choose number of sightlines requested
+    rand_i = np.random.choice(np.arange(len(ra_grid)), size=n_sightlines, replace=False)
+    ra_grid, dec_grid = ra_grid[rand_i], dec_grid[rand_i]
     close_enough = np.zeros_like(ra_grid).astype(bool) # all gridpoints False
     dist_thres = 6.0/3600.0 # matching threshold, in deg
     sightline_cols = ['ra_true', 'dec_true', 'redshift']
@@ -143,18 +151,22 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path):
         # FIXME: use redshift_true
         high_z = df[(df['redshift']>2.0)].reset_index(drop=True) 
         if len(high_z) > 0:
-            sub_catalog = cu.get_skycoord(high_z['ra_true'].values, 
-                                             high_z['dec_true'].values)
-            idx, dist, _ = gridpoints.match_to_catalog_sky(sub_catalog)
-            passing_crit = dist<dist_thres
-            passing = idx[passing_crit]
-            close_enough[passing] = True
-            more_sightlines = high_z.iloc[passing]
-            more_sightlines['eps'] = dist[passing_crit]
+            i_grid, i_cat, dist = cu.match(
+                                           high_z['ra_true'].values,
+                                           high_z['dec_true'].values,
+                                           gridpoints,
+                                           dist_thres
+                                           )
+            close_enough[i_grid] = True
+            more_sightlines = high_z.iloc[i_cat]
+            more_sightlines['eps'] = dist
             sightlines = sightlines.append(more_sightlines, ignore_index=True)
     sightlines.reset_index(drop=True, inplace=True)
     rename_cosmodc2_cols(sightlines)
     sightlines.to_csv(out_path, index=None)
+    end = time.time()
+    print("Generated {:d} sightlines in {:.2f} min.".format(n_sightlines,
+                                                            (end-start)/60.0))
     return sightlines
 
 def get_los_halos(generator, ra_los, dec_los, z_src, fov, mass_cut, out_path):

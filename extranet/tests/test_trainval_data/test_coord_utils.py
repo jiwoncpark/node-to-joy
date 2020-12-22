@@ -23,10 +23,11 @@ class TestCoordUtils(unittest.TestCase):
 
         """
         # Say we want 17 subsamples of a healpix, close to 2 order diff (16)
+        # Then we need to choose 3 order diff to sample more than 17
         order_diff = 2
         n_samples = int(4**order_diff + 1)
         order_in = 5
-        nside_desired = int(2**(order_in + order_diff))
+        nside_desired = int(2**(order_in + order_diff + 1))
         nside_actual = cu.get_target_nside(n_samples, nside_in=2**order_in)
         np.testing.assert_equal(nside_actual, nside_desired)
 
@@ -38,6 +39,7 @@ class TestCoordUtils(unittest.TestCase):
         skycoord_actual = cu.get_skycoord(ra=np.array([0, 1, 2]),
                                           dec=np.array([0, 1, 2]))
         assert isinstance(skycoord_actual, SkyCoord)
+        assert skycoord_actual.shape[0] == 3
 
     def test_get_healpix_centers(self):
         """Test if correct sky locations are returned in the cosmoDC2 convention
@@ -75,11 +77,36 @@ class TestCoordUtils(unittest.TestCase):
         # Test 2: Input pix_i is in RING
         actual = cu.upgrade_healpix(pix_i, False, nside_in, nside_out)
         # See https://stackoverflow.com/a/56675901
+        # `reorder` reorders RING IDs in NESTED order
+        # `reshape` is possible because the ordering is NESTED
+        # indexing should be done with a NESTED ID because ordering is NESTED
+        # but the output is in RING ID, which was reordered in the first place
         desired_all = hp.reorder(np.arange(npix_out), r2n=True).reshape((npix_in, 4))
-        desired_nest = np.sort(desired_all[hp.ring2nest(nside_in, pix_i), :])
-        np.testing.assert_array_equal(actual, desired_nest, "input in RING") 
-        desired_ring = hp.nest2ring(nside_out, desired_nest)
-        np.testing.assert_array_equal(desired_ring, [14, 26, 27, 43], "visual")  
+        desired_ring = desired_all[hp.ring2nest(nside_in, pix_i), :]
+        np.testing.assert_array_equal(np.sort(desired_ring), 
+                                      [14, 26, 27, 43], 
+                                      "visual")  
+        desired_nest = hp.ring2nest(nside_out, desired_ring)
+        np.testing.assert_array_equal(np.sort(actual), 
+                                      np.sort(desired_nest), 
+                                      "input in RING") 
+
+    def test_match(self):
+        """Test correctness of matching
+
+        """
+        ra_grid = np.array([1, 2, 3])
+        dec_grid = np.array([1, 2, 3])
+        gridpoints = cu.get_skycoord(ra_grid, dec_grid)
+        ra_cat = np.array([1.1, 10, 20, 1.9, 30])
+        dec_cat = np.array([1.1, 20, 10, 1.9, 30])
+        fake_dist = np.sqrt(2*0.1**2.0)
+        i_grid, i_cat, dist = cu.match(ra_cat, dec_cat, gridpoints, 0.5)
+        np.testing.assert_array_equal(i_grid, [0, 1])
+        np.testing.assert_array_equal(i_cat, [0, 3])
+        np.testing.assert_array_almost_equal(dist, 
+                                             [fake_dist, fake_dist], 
+                                             decimal=4)
 
     @classmethod
     def tearDownClass(cls):
