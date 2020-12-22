@@ -63,14 +63,17 @@ class TestRaytracingUtils(unittest.TestCase):
         assert halos.shape[0] == 3
 
     def test_get_sightlines_on_grid(self):
-        """Test number of sightlines and errorless execution
+        """Test number of sightlines and correctness of matching distance
 
         """
         np.random.seed(123)
         N = 1000 
         out_path = os.path.join(self.out_dir, 'sightlines.csv')
         sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path)
-        assert sightlines.shape[0] == N
+        np.testing.assert_array_equal(sightlines.shape[0], N, 
+                                      err_msg='wrong number of sightlines')
+        np.testing.assert_array_less(sightlines['eps'].values, 6.0/3600.0,
+                                     err_msg='some LOS not satisfying dist cut')
 
     def test_get_nfw_kwargs(self):
         """Test if the vectorization across halos returns the same values
@@ -83,6 +86,7 @@ class TestRaytracingUtils(unittest.TestCase):
             c_200 = ru.get_concentration(halo_mass, stellar_mass)
             n_halos = len(halo_mass)
             halo_Rs, halo_alpha_Rs = np.empty(n_halos), np.empty(n_halos)
+            halo_lensing_eff = np.empty(n_halos)
             for halo_i in range(n_halos):
                 lens_cosmo = LensCosmo(z_lens=halo_z[halo_i], 
                                        z_source=z_src, 
@@ -91,21 +95,24 @@ class TestRaytracingUtils(unittest.TestCase):
                                                                    c=c_200[halo_i])
                 rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
                                                                         alpha_Rs=alpha_Rs)
+                lensing_eff = lens_cosmo.dds/lens_cosmo.ds
                 halo_Rs[halo_i] = Rs
                 halo_alpha_Rs[halo_i] = alpha_Rs
-            return halo_Rs, halo_alpha_Rs
+                halo_lensing_eff[halo_i] = lensing_eff
+            return halo_Rs, halo_alpha_Rs, halo_lensing_eff
         np.random.seed(123)
-        Rs, alpha_Rs = get_nfw_kwargs_loop(self.halo_mass, 
-                                           self.stellar_mass, 
-                                           self.halo_z, 
-                                           self.z_src)
+        Rs, alpha_Rs, lensing_eff = get_nfw_kwargs_loop(self.halo_mass, 
+                                                        self.stellar_mass, 
+                                                        self.halo_z, 
+                                                        self.z_src)
         np.random.seed(123)
-        Rs_vec, alpha_Rs_vec, lensing_eff = ru.get_nfw_kwargs(self.halo_mass, 
+        Rs_vec, alpha_Rs_vec, lensing_eff_vec = ru.get_nfw_kwargs(self.halo_mass, 
                                                               self.stellar_mass, 
                                                               self.halo_z, 
                                                               self.z_src)
         np.testing.assert_array_almost_equal(Rs_vec, Rs)
         np.testing.assert_array_almost_equal(alpha_Rs_vec, alpha_Rs)
+        np.testing.assert_array_almost_equal(lensing_eff_vec, lensing_eff)
 
     def test_raytrace_single_sightline(self):
         """Test if the raytrace_single_sightline runs without error and outputs
@@ -133,6 +140,7 @@ class TestRaytracingUtils(unittest.TestCase):
                                                       self.z_src)
         halos['Rs'] = Rs
         halos['alpha_Rs'] = alpha_Rs
+        halos['lensing_eff'] = lensing_eff
         halos.reset_index(drop=True, inplace=True)
         halos.to_csv(halo_path, index=None)
         ru.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los, 

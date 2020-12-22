@@ -76,24 +76,40 @@ def get_target_nside(n_pix, nside_in=2**5):
     nside_out = int(2**order_out)
     return nside_out
 
-def match(ra_cat, dec_cat, gridpoints, threshold):
+def match(ra_grid, dec_grid, ra_cat, dec_cat, threshold):
     """Match gridpoints to a catalog based on distance threshold
 
     Parameters
     ----------
+    ra_grid : np.array
+    dec_grid : np.array
     ra_cat : np.array
     dec_cat : np.array
     gridpoints : astropy.SkyCoord instance
     threshold : float
         matching distance threshold in deg
+    extra_constraint : np.array of type bool
+        another set of constraints, aside from separation constraint. Ordering 
+        must be based on gridpoints
+
+    Returns
+    -------
+    sep_constraint : np.array of shape same as ra/dec_grid and type bool
+        whether each gridpoint was matched to a catalog within sep limit
+    passing_i_cat : np.array of length same as ra_grid[sep_constraint]
+        catalog idx (value) corresponding to each successfully matched 
+        gridpoint (position)
+    passing_dist : np.array of shape same as passing_i_cat
+        distance (value) corresponding to each successfully matched gridpoint 
+        (position) 
 
     """
-    n_grid = gridpoints.shape[0]
+    gridpoints = get_skycoord(ra_grid, dec_grid)
     sub_catalog = get_skycoord(ra_cat, dec_cat)
     # idx returned is wrt catalog
     idx_cat, dist, _ = gridpoints.match_to_catalog_sky(sub_catalog)
-    passing_crit = dist<threshold*u.degree
-    passing_i_grid = np.arange(n_grid)[passing_crit] # idx wrt the gridpoints
-    passing_i_cat = idx_cat[passing_crit]
-    passing_dist = dist.value[passing_crit]
-    return passing_i_grid, passing_i_cat, passing_dist
+    sep_constraint = dist<threshold*u.degree
+    #passing_i_grid = np.arange(n_grid)[passing_crit] # idx wrt the gridpoints
+    passing_i_cat = idx_cat[sep_constraint]
+    passing_dist = dist.value[sep_constraint]
+    return sep_constraint, passing_i_cat, passing_dist

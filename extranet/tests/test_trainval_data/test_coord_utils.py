@@ -69,6 +69,7 @@ class TestCoordUtils(unittest.TestCase):
         # Check if mappings from NSIDE=1 to NSIDE=2 match
         # Output is always NESTED
         # Test 1: Input pix_i is in NESTED
+        # "visual" checks with https://healpix.jpl.nasa.gov/html/intronode4.htm
         actual = cu.upgrade_healpix(pix_i, True, nside_in, nside_out)
         desired_all = np.arange(npix_out).reshape((npix_in, 4))
         desired = np.sort(desired_all[pix_i, :]) # NESTED
@@ -97,12 +98,12 @@ class TestCoordUtils(unittest.TestCase):
         """
         ra_grid = np.array([1, 2, 3])
         dec_grid = np.array([1, 2, 3])
-        gridpoints = cu.get_skycoord(ra_grid, dec_grid)
         ra_cat = np.array([1.1, 10, 20, 1.9, 30])
         dec_cat = np.array([1.1, 20, 10, 1.9, 30])
         fake_dist = np.sqrt(2*0.1**2.0)
-        i_grid, i_cat, dist = cu.match(ra_cat, dec_cat, gridpoints, 0.5)
-        np.testing.assert_array_equal(i_grid, [0, 1])
+        constraint, i_cat, dist = cu.match(ra_grid, dec_grid,
+                                           ra_cat, dec_cat, 0.5)
+        np.testing.assert_array_equal(constraint, [True, True, False])
         np.testing.assert_array_equal(i_cat, [0, 3])
         np.testing.assert_array_almost_equal(dist, 
                                              [fake_dist, fake_dist], 

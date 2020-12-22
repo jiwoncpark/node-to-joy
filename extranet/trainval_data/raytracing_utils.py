@@ -105,8 +105,6 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
-
-
 def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     """Get the sightlines
     
@@ -141,26 +139,26 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     ra_grid, dec_grid = ra_grid[rand_i], dec_grid[rand_i]
     close_enough = np.zeros_like(ra_grid).astype(bool) # all gridpoints False
     dist_thres = 6.0/3600.0 # matching threshold, in deg
-    sightline_cols = ['ra_true', 'dec_true', 'redshift']
+    sightline_cols = ['ra_true', 'dec_true', 'redshift'] # FIXME: redshift_true
     sightline_cols += ['convergence', 'shear1', 'shear2']
     cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols)
-    gridpoints = cu.get_skycoord(ra_grid, dec_grid)
-    sightlines = pd.DataFrame() # init running dataframe
+    sightlines = pd.DataFrame()
     while np.all(close_enough) == False:
         df = next(cosmodc2)
-        # FIXME: use redshift_true
         high_z = df[(df['redshift']>2.0)].reset_index(drop=True) 
         if len(high_z) > 0:
-            i_grid, i_cat, dist = cu.match(
-                                           high_z['ra_true'].values,
-                                           high_z['dec_true'].values,
-                                           gridpoints,
-                                           dist_thres
-                                           )
-            close_enough[i_grid] = True
+            remaining = ~close_enough 
+            passing, i_cat, dist = cu.match(
+                                            ra_grid[remaining],
+                                            dec_grid[remaining],
+                                            high_z['ra_true'].values,
+                                            high_z['dec_true'].values,
+                                            dist_thres
+                                            )
             more_sightlines = high_z.iloc[i_cat]
             more_sightlines['eps'] = dist
             sightlines = sightlines.append(more_sightlines, ignore_index=True)
+            close_enough[remaining] = passing
     sightlines.reset_index(drop=True, inplace=True)
     rename_cosmodc2_cols(sightlines)
     sightlines.to_csv(out_path, index=None)
