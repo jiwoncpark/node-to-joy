@@ -119,8 +119,8 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path):
 
     Notes
     -----
-    Currently takes ~7 hr for 156 sightlines (grid size of 15 arcmin),
-    but doesn't have to be so rigorous about finding sightlines closest to grid.
+    Currently takes 1.2 min for 1000 sightlines.
+    Doesn't have to be so rigorous about finding sightlines closest to grid.
     Two requirements are that sightlines need to be dominated by cosmic variance
     (span a few degrees) and that each sightline has a galaxy.
 
