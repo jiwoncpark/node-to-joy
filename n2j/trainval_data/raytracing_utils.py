@@ -22,7 +22,7 @@ def get_cosmodc2_generator(healpix, columns=None, chunksize=100000):
     """Get a generator of cosmoDC2, too big to store in memory at once
 
     """
-    from extranet import data 
+    from n2j import data 
     cosmodc2_path = os.path.join(data.__path__[0], 
                                  'cosmodc2_train', 'raw',
                                  'cosmodc2_trainval_{:d}.csv'.format(healpix))
@@ -54,7 +54,7 @@ def rename_cosmodc2_cols(df):
     """Rename cosmoDC2-specific columns to mroe general ones
 
     """
-    from extranet import trainval_data 
+    from n2j import trainval_data 
     meta_path = os.path.join(trainval_data.__path__[0], 'catalog_metadata.yaml')
     with open(meta_path) as file:
         meta = yaml.load(file, Loader=yaml.FullLoader)

@@ -4,7 +4,7 @@ Example
 -------
 To run this script, pass in the destination directory as the argument::
     
-    $ python extranet/raytrace_cosmodc2.py <dest_dir>
+    $ python n2j/raytrace_cosmodc2.py <dest_dir>
 
 """
 
