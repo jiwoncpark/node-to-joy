@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import shutil
 import pandas as pd
-from extranet.trainval_data import raytracing_utils as ru
+from n2j.trainval_data import raytracing_utils as ru
 
 class TestRaytracingUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods

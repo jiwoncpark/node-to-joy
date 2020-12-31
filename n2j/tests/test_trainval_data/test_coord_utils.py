@@ -4,7 +4,7 @@ import numpy as np
 import shutil
 import pandas as pd
 import healpy as hp
-from extranet.trainval_data import coord_utils as cu
+from n2j.trainval_data import coord_utils as cu
 
 class TestCoordUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods

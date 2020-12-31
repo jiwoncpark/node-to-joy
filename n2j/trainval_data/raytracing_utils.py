@@ -9,7 +9,7 @@ from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 #from lenstronomy.LensModel.Profiles.nfw import NFW
 from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
-import extranet.trainval_data.coord_utils as cu
+import n2j.trainval_data.coord_utils as cu
 
 kappa_diff = 1.0
 __all__ = ['get_cosmodc2_generator', 'get_healpix_bounds', 'fall_inside_bounds']
@@ -34,7 +34,7 @@ def get_prestored_healpix_bounds(healpix):
     """Fetch bounds from prestored metadata
 
     """
-    from extranet import trainval_data 
+    from n2j import trainval_data 
     meta_path = os.path.join(trainval_data.__path__[0], 'catalog_metadata.yaml')
     with open(meta_path) as file:
         meta = yaml.load(file, Loader=yaml.FullLoader)

@@ -16,7 +16,7 @@ import functools
 import pandas as pd
 from tqdm import tqdm
 import multiprocessing
-from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
+from n2j.trainval_data.raytracing_utils import (raytrace_single_sightline, 
 get_sightlines_on_grid)
 
 def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
