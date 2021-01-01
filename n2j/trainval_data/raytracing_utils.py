@@ -16,14 +16,28 @@ __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
 __all__ += ['get_distance', 'get_concentration']
 __all__ += ['is_outlier', 'raytrace_single_sightline']
 
-def get_cosmodc2_generator(healpix, columns=None, chunksize=100000):
+def get_cosmodc2_generator(healpix, columns=None, chunksize=100000, small=False):
     """Get a generator of cosmoDC2, too big to store in memory at once
+
+    Parameters
+    ----------
+    columns : list
+        list of columns to load. Must match the CSV header.
+    chunksize : int
+        number of rows in each chunk
+    small : bool
+        whether to load a small CSV of only 1000 rows, for testing purposes.
 
     """
     from n2j import data 
-    cosmodc2_path = os.path.join(data.__path__[0], 
-                                 'cosmodc2_train', 'raw',
-                                 'cosmodc2_trainval_{:d}.csv'.format(healpix))
+    if small:
+        cosmodc2_path = os.path.join(data.__path__[0], 
+                                     'cosmodc2_small', 'raw',
+                                     'cosmodc2_small.csv')
+    else:
+        cosmodc2_path = os.path.join(data.__path__[0], 
+                                     'cosmodc2_train', 'raw',
+                                     'cosmodc2_trainval_{:d}.csv'.format(healpix))
     cosmodc2 = pd.read_csv(cosmodc2_path, chunksize=chunksize, nrows=None,
                            usecols=columns)
     return cosmodc2
@@ -311,7 +325,8 @@ def is_outlier(points, thresh=3):
 
 def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov, 
                               map_kappa, map_gamma,
-                              n_kappa_samples, mass_cut, dest_dir):
+                              n_kappa_samples, mass_cut, dest_dir,
+                              test=False):
     """Raytrace through a single sightline
 
     """
@@ -321,7 +336,7 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
     else:
         halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
         halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
-        cosmodc2 = get_cosmodc2_generator(healpix, halo_cols)
+        cosmodc2 = get_cosmodc2_generator(healpix, halo_cols, small=test)
         halos = get_los_halos(cosmodc2, ra_los, dec_los, z_src, fov, mass_cut, halo_filename)    
     n_halos = halos.shape[0]
     # Instantiate multi-plane lens model

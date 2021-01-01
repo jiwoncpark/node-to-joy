@@ -146,7 +146,7 @@ class TestRaytracingUtils(unittest.TestCase):
         ru.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los, 
                                            z_src, fov, False, False,
                                            n_kappa_samples, mass_cut, 
-                                           self.out_dir)
+                                           self.out_dir, test=True)
         kappa_samples_path = '{:s}/kappa_samples_sightline={:d}.npy'.format(self.out_dir, idx)
         kappa_samples = np.load(kappa_samples_path)
         assert len(kappa_samples) == n_kappa_samples
