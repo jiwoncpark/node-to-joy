@@ -4,7 +4,7 @@ Example
 -------
 To run this script, pass in the destination directory as the argument::
     
-    $ python extranet/raytrace_cosmodc2.py <dest_dir>
+    $ python n2j/raytrace_cosmodc2.py <dest_dir>
 
 """
 
@@ -16,8 +16,8 @@ import functools
 import pandas as pd
 from tqdm import tqdm
 import multiprocessing
-from extranet.trainval_data.raytracing_utils import (raytrace_single_sightline, 
-get_sightlines_random)
+from n2j.trainval_data.raytracing_utils import (raytrace_single_sightline, 
+get_sightlines_on_grid)
 
 def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
                     n_kappa_samples, mass_cut, dest_dir):
@@ -26,7 +26,7 @@ def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
     raytrace_single_sightline(i, 
                               healpix,
                               sightline['ra'], sightline['dec'],
-                              sightline['redshift'], 
+                              sightline['gal_z'], 
                               fov,
                               map_kappa,
                               map_gamma,
@@ -37,7 +37,7 @@ def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
 
 class Sightlines:
     """Set of sightlines in a cosmoDC2 field"""
-    def __init__(self, dest_dir, fov, map_kappa, map_gamma, 
+    def __init__(self, dest_dir, fov, map_kappa, map_gamma, one_sightline,
                  mass_cut=11, n_sightlines=1000):
         """
         Parameters
@@ -54,9 +54,12 @@ class Sightlines:
 
         """
         self.dest_dir = dest_dir
+        if not os.path.exists(self.dest_dir):
+            os.mkdir(self.dest_dir)
         self.fov = fov
         self.map_kappa = map_kappa
         self.map_gamma = map_gamma
+        self.one_sightline = one_sightline # FIXME
         self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
         self.healpix = 10450
@@ -65,16 +68,15 @@ class Sightlines:
         open(self.uncalib_path, 'a').close()
         
     def _get_pointings(self):
-        sightlines_path = '{:s}/random_sightlines.csv'.format(self.dest_dir)
+        sightlines_path = '{:s}/sightlines.csv'.format(self.dest_dir)
         if os.path.exists(sightlines_path):
             self.pointings = pd.read_csv(sightlines_path, 
                                          index_col=None,
                                          nrows=self.n_sightlines)
         else:
-            self.pointings = get_sightlines_random(self.healpix,
+            self.pointings = get_sightlines_on_grid(self.healpix,
                                                    self.n_sightlines, 
-                                                   sightlines_path,
-                                                   edge_buffer=self.fov*0.5)
+                                                   sightlines_path)
 
     def parallel_raytrace(self):
         single = functools.partial(single_raytrace, 
@@ -108,12 +110,15 @@ if __name__ == '__main__':
     parser.add_argument('--n_sightlines', default=1000, dest='n_sightlines', type=int,
                         help='number of sightlines to raytrace through (Default: 1000)')
     parser.add_argument('--mass_cut', default=11.0, dest='mass_cut', type=float,
-                        help='log10(minimum halo mass) (Default: 11.0)')
+                        help='log10(minimum halo mass/solar) (Default: 11.0)')
+    parser.add_argument('--one_sightline', default=None, dest='one_sightline', type=int,
+                        help='index of a single sightline to run')
     args = parser.parse_args()
 
     n_cores = min(multiprocessing.cpu_count() - 1, args.n_sightlines)
+    sightlines = Sightlines(**vars(args))
     with multiprocessing.Pool(n_cores) as pool:
-        Sightlines(**vars(args)).parallel_raytrace()
+        sightlines.parallel_raytrace()
     #pr.disable()
     #pr.print_stats(sort='cumtime')
     #for i in tqdm(range(n_sightlines), desc="Raytracing through each sightline"):
