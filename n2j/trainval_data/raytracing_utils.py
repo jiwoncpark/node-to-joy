@@ -216,7 +216,7 @@ def get_los_halos(generator, ra_los, dec_los, z_src, fov, mass_cut, out_path):
 def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     c_200 = get_concentration(halo_mass, stellar_mass)
     lens_cosmo = LensCosmo(z_lens=halo_z, z_source=z_src, cosmo=WMAP7)
-    lensing_eff = lens_cosmo.dds/lens_cosmo.ds
+    lensing_eff = lens_cosmo.dd*lens_cosmo.dds/lens_cosmo.ds
     Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass, c=c_200)
     rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
                                                             alpha_Rs=alpha_Rs)

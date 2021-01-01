@@ -1,8 +1,5 @@
-import os
 import unittest
 import numpy as np
-import shutil
-import pandas as pd
 import healpy as hp
 from n2j.trainval_data import coord_utils as cu
 

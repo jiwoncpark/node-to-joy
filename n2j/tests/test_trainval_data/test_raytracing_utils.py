@@ -95,7 +95,7 @@ class TestRaytracingUtils(unittest.TestCase):
                                                                    c=c_200[halo_i])
                 rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
                                                                         alpha_Rs=alpha_Rs)
-                lensing_eff = lens_cosmo.dds/lens_cosmo.ds
+                lensing_eff = lens_cosmo.dd*lens_cosmo.dds/lens_cosmo.ds
                 halo_Rs[halo_i] = Rs
                 halo_alpha_Rs[halo_i] = alpha_Rs
                 halo_lensing_eff[halo_i] = lensing_eff
