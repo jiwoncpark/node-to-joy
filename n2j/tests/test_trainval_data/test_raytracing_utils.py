@@ -67,7 +67,7 @@ class TestRaytracingUtils(unittest.TestCase):
 
         """
         np.random.seed(123)
-        N = 1000 
+        N = 100 
         out_path = os.path.join(self.out_dir, 'sightlines.csv')
         sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path)
         np.testing.assert_array_equal(sightlines.shape[0], N, 

@@ -117,7 +117,7 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
-def get_sightlines_on_grid(healpix, n_sightlines, out_path):
+def get_sightlines_on_grid(healpix, n_sightlines, out_path, test=False):
     """Get the sightlines
     
     Parameters
@@ -153,7 +153,7 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path):
     dist_thres = 6.0/3600.0 # matching threshold, in deg
     sightline_cols = ['ra_true', 'dec_true', 'redshift'] # FIXME: redshift_true
     sightline_cols += ['convergence', 'shear1', 'shear2']
-    cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols)
+    cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols, small=test)
     sightlines = pd.DataFrame()
     while np.all(close_enough) == False:
         df = next(cosmodc2)
