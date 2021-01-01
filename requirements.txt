@@ -1,0 +1,14 @@
+git+https://github.com/jiwoncpark/lenstronomy.git@master
+git+https://github.com/jiwoncpark/skypy.git@master
+#torch
+#torchvision
+#tb-nightly
+future
+numpy
+matplotlib
+ipykernel
+astropy
+pandas
+dynesty
+tqdm
+mpmath
