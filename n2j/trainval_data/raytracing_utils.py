@@ -13,7 +13,7 @@ kappa_diff = 1.0
 __all__ = ['get_cosmodc2_generator', 'get_healpix_bounds', 'fall_inside_bounds']
 __all__ += ['get_sightlines_on_grid']
 __all__ += ['get_los_halos', 'get_nfw_kwargs', 'get_kappa_map']
-__all__ += ['sample_in_aperture', 'get_distance', 'get_concentration']
+__all__ += ['get_distance', 'get_concentration']
 __all__ += ['is_outlier', 'raytrace_single_sightline']
 
 def get_cosmodc2_generator(healpix, columns=None, chunksize=100000):
