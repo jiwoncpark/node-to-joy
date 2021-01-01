@@ -3,6 +3,7 @@ import numpy as np
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+from skypy.position import uniform_around
 
 def upgrade_healpix(pix_id, nested, nside_in, nside_out):
     """Upgrade (superresolve) a healpix into finer ones
@@ -113,3 +114,23 @@ def match(ra_grid, dec_grid, ra_cat, dec_cat, threshold):
     passing_i_cat = idx_cat[sep_constraint]
     passing_dist = dist.value[sep_constraint]
     return sep_constraint, passing_i_cat, passing_dist
+
+def sample_in_aperture(N, radius):
+    """Uniformly sample points around a zero coordinate on the celestial sphere
+
+    Parameters
+    ----------
+    radius : float
+        Aperture radius in deg
+
+    Returns
+    -------
+    tuple
+        (RA, dec) of the angular offsets in deg
+
+    """
+    c = SkyCoord(0, 0, unit='deg') # absolute pos doesn't matter
+    area = u.Quantity(np.pi*radius**2.0, unit='deg2')
+    pos = uniform_around(c, area, size=N)
+    ra, dec = c.spherical_offsets_to(pos) # roundabout but does the job...
+    return ra.value, dec.value

@@ -1,10 +1,8 @@
 import yaml
 import os
-import itertools
 import time
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 #from lenstronomy.LensModel.Profiles.nfw import NFW
@@ -192,8 +190,9 @@ def get_los_halos(generator, ra_los, dec_los, z_src, fov, mass_cut, out_path):
             df['dist'] = d*60.0 # deg to arcmin
             df['ra_diff'] = ra_diff # deg
             df['dec_diff'] = dec_diff # deg
-            #df = df[df['dist'] > 0.0].reset_index(drop=True) # can't be the halo itself
-            halos = halos.append(df[df['dist'].values < fov*0.5], ignore_index=True)
+            #df = df[df['dist'] > 0.0].reset_index(drop=True) # exclude itself
+            halos = halos.append(df[df['dist'].values < fov*0.5], 
+                                 ignore_index=True)
         else:
             continue
 
@@ -249,32 +248,6 @@ def get_gamma_maps(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=N
     gamma1_map, gamma2_map = lens_model.gamma(xx, yy, nfw_kwargs, diff=kappa_diff)
     np.save(save_path[0], gamma1_map)
     np.save(save_path[1], gamma2_map)
-
-def sample_in_aperture(N, radius):
-    """Sample N points around a zero coordinate on the celestial sphere
-
-    Parameters
-    ----------
-    radius : float
-        Aperture radius in deg
-
-    """
-    success = False
-    while not success:
-        buf = 10
-        u1 = np.random.rand(N*buf)
-        u2 = np.random.rand(N*buf)
-        RA  = (radius*2.0)*(u1 - 0.5) # deg
-        # See https://astronomy.stackexchange.com/a/22399
-        dec = (radius*2.0/np.pi)*(np.arcsin(2.*(u2-0.5))) # deg 
-        within_aperture = get_distance(0.0, 0.0, ra_f=RA, dec_f=dec)[0] < radius
-        try:
-            RA = RA[within_aperture][:N]
-            dec = dec[within_aperture][:N]
-            success = True
-        except:
-            continue
-    return RA, dec
 
 def get_distance(ra_i, dec_i, ra_f, dec_f):
     """Compute the distance between two angular positions given in degrees
@@ -388,7 +361,7 @@ def raytrace_single_sightline(idx, healpix, ra_los, dec_los, z_src, fov,
         kappa_samples = np.empty(n_kappa_samples)
         S = 0
         while S < n_kappa_samples:
-            new_ra, new_dec = sample_in_aperture(n_halos, fov*0.5/60.0)
+            new_ra, new_dec = cu.sample_in_aperture(n_halos, fov*0.5/60.0)
             halos['center_x'] = new_ra*3600.0
             halos['center_y'] = new_dec*3600.0
             #halos['center_x'] = new_ra[n_halos*S:n_halos*(S+1)]
