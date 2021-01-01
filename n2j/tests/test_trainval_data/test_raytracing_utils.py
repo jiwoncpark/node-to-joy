@@ -69,7 +69,8 @@ class TestRaytracingUtils(unittest.TestCase):
         np.random.seed(123)
         N = 100 
         out_path = os.path.join(self.out_dir, 'sightlines.csv')
-        sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path)
+        sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path, 
+                                               test=True)
         np.testing.assert_array_equal(sightlines.shape[0], N, 
                                       err_msg='wrong number of sightlines')
         np.testing.assert_array_less(sightlines['eps'].values, 6.0/3600.0,
