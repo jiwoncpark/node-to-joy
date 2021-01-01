@@ -67,13 +67,14 @@ class TestRaytracingUtils(unittest.TestCase):
 
         """
         np.random.seed(123)
-        N = 100 
+        N = 30 
+        resolution = 0.2
         out_path = os.path.join(self.out_dir, 'sightlines.csv')
         sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path, 
-                                               test=True)
+                                               dist_thres=resolution, test=True)
         np.testing.assert_array_equal(sightlines.shape[0], N, 
                                       err_msg='wrong number of sightlines')
-        np.testing.assert_array_less(sightlines['eps'].values, 6.0/3600.0,
+        np.testing.assert_array_less(sightlines['eps'].values, resolution,
                                      err_msg='some LOS not satisfying dist cut')
 
     def test_get_nfw_kwargs(self):

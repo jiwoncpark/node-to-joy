@@ -117,7 +117,8 @@ def fall_inside_bounds(pos_ra, pos_dec, min_ra, max_ra, min_dec, max_dec):
     inside_dec = np.logical_and(pos_dec < max_dec, pos_dec > min_dec)
     return np.logical_and(inside_ra, inside_dec)
 
-def get_sightlines_on_grid(healpix, n_sightlines, out_path, test=False):
+def get_sightlines_on_grid(healpix, n_sightlines, out_path, 
+                           dist_thres=6.0/3600.0, test=False):
     """Get the sightlines
     
     Parameters
@@ -126,6 +127,8 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path, test=False):
         healpix ID that will be supersampled
     n_sightlines : int
         desired number of sightlines
+    dist_thres : float
+        matching threshold between gridpoints and halo positions, in deg
     out_path : str or os.path instance
         where the output file `sightlines.csv` will be stored
 
@@ -150,14 +153,13 @@ def get_sightlines_on_grid(healpix, n_sightlines, out_path, test=False):
     rand_i = np.random.choice(np.arange(len(ra_grid)), size=n_sightlines, replace=False)
     ra_grid, dec_grid = ra_grid[rand_i], dec_grid[rand_i]
     close_enough = np.zeros_like(ra_grid).astype(bool) # all gridpoints False
-    dist_thres = 6.0/3600.0 # matching threshold, in deg
-    sightline_cols = ['ra_true', 'dec_true', 'redshift'] # FIXME: redshift_true
+    sightline_cols = ['ra_true', 'dec_true', 'redshift_true']
     sightline_cols += ['convergence', 'shear1', 'shear2']
     cosmodc2 = get_cosmodc2_generator(healpix, sightline_cols, small=test)
     sightlines = pd.DataFrame()
     while np.all(close_enough) == False:
         df = next(cosmodc2)
-        high_z = df[(df['redshift']>2.0)].reset_index(drop=True) 
+        high_z = df[(df['redshift_true']>2.0)].reset_index(drop=True) 
         if len(high_z) > 0:
             remaining = ~close_enough 
             passing, i_cat, dist = cu.match(

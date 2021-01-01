@@ -5,7 +5,7 @@ cosmodc2:
     column_names:
       ra_true: ra
       dec_true: dec
-      redshift: gal_z
+      redshift_true: gal_z
       convergence: wl_kappa
       shear1: gamma1
       shear2: gamma2
