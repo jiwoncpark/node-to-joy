@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import healpy as hp
 from n2j.trainval_data import coord_utils as cu
+from scipy import stats
 
 class TestCoordUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods
@@ -37,6 +38,21 @@ class TestCoordUtils(unittest.TestCase):
                                           dec=np.array([0, 1, 2]))
         assert isinstance(skycoord_actual, SkyCoord)
         assert skycoord_actual.shape[0] == 3
+
+    def test_sample_in_aperture(self):
+        """Test uniform distribution of samples
+
+        """
+        radius = 3.0/60.0 # deg
+        x, y = cu.sample_in_aperture(10000, radius=radius)
+        r2 = x**2 + y**2
+        ang = np.arctan2(y, x)
+        uniform_rv_r2 = stats.uniform(loc=0, scale=radius**2.0)
+        D, p = stats.kstest(r2, uniform_rv_r2.cdf)
+        np.testing.assert_array_less(0.01, p, err_msg='R2 fails KS test')
+        uniform_rv_ang = stats.uniform(loc=-np.pi, scale=2*np.pi)
+        D, p = stats.kstest(ang, uniform_rv_ang.cdf)
+        np.testing.assert_array_less(0.01, p, err_msg='angle fails KS test')
 
     def test_get_healpix_centers(self):
         """Test if correct sky locations are returned in the cosmoDC2 convention
