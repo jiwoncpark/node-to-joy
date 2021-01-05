@@ -11,6 +11,7 @@ To run this script, pass in the destination directory as the argument::
 import os
 import sys
 import itertools
+import numpy as np
 import argparse
 import functools
 import pandas as pd
@@ -26,7 +27,7 @@ def single_raytrace(i, healpix, sightlines, fov, map_kappa, map_gamma,
     raytrace_single_sightline(i, 
                               healpix,
                               sightline['ra'], sightline['dec'],
-                              sightline['gal_z'], 
+                              sightline['z'], 
                               fov,
                               map_kappa,
                               map_gamma,
@@ -53,6 +54,7 @@ class Sightlines:
             number of sightlines to raytrace through (Default: 1000)
 
         """
+        np.random.seed(123)
         self.dest_dir = dest_dir
         if not os.path.exists(self.dest_dir):
             os.mkdir(self.dest_dir)

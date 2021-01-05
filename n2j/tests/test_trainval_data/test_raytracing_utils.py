@@ -42,14 +42,14 @@ class TestRaytracingUtils(unittest.TestCase):
         # Prepare input dataframe generator
         test_cosmodc2_path = os.path.join(self.out_dir, 'cosmodc2.csv')
         halo_cols = ['halo_mass', 'stellar_mass', 'is_central']
-        halo_cols += ['ra_true', 'dec_true', 'baseDC2/target_halo_redshift']
+        halo_cols += ['ra_true', 'dec_true', 'redshift_true']
         df = pd.DataFrame({
                          'halo_mass': 10.0**np.array([10, 10.5, 11.1, 11.5, 12]),
                          'stellar_mass': 10.0**np.array([10, 10, 10, 10, 10]),
                          'is_central': [True]*5,
                          'ra_true': np.array([1, 1, 1, 1, 2])/60.0, # deg
                          'dec_true': np.array([1, 1, 1, 1, 2])/60.0, # deg
-                         'baseDC2/target_halo_redshift': [1.0]*5})
+                         'redshift_true': [1.0]*5})
         df.to_csv(test_cosmodc2_path, index=None)
         df_gen = pd.read_csv(test_cosmodc2_path, index_col=None, chunksize=2)
         # Generate halos
@@ -116,6 +116,20 @@ class TestRaytracingUtils(unittest.TestCase):
         np.testing.assert_array_almost_equal(alpha_Rs_vec, alpha_Rs)
         np.testing.assert_array_almost_equal(lensing_eff_vec, lensing_eff)
 
+    def test_get_concentration(self):
+        """Test mass-concentration relation at extreme values
+
+        """
+        c_0 = 3.19
+        c200_at_stellar_mass = ru.get_concentration(1.0, 1.0, 
+                      m=-0.10, A=3.44, trans_M_ratio=430.49, c_0=c_0)
+        c200_at_high_halo_mass = ru.get_concentration(10.0**5, 1.0, 
+                      m=-0.10, A=3.44, trans_M_ratio=430.49, c_0=c_0)
+        np.testing.assert_almost_equal(c200_at_stellar_mass, 6.060380052400085,
+                                       err_msg='halo mass at stellar mass')
+        np.testing.assert_almost_equal(c200_at_high_halo_mass, c_0, decimal=2,
+                                       err_msg='at high halo mass')
+
     def test_raytrace_single_sightline(self):
         """Test if the raytrace_single_sightline runs without error and outputs
         reasonable sightline kappa and resampled kappas
@@ -132,13 +146,13 @@ class TestRaytracingUtils(unittest.TestCase):
         halos = pd.DataFrame({
                              'halo_mass': self.halo_mass,
                              'stellar_mass': self.stellar_mass,
-                             'halo_z': self.halo_z,
+                             'z': self.halo_z,
                              'center_x': self.halo_ra*3600.0,
                              'center_y': self.halo_dec*3600.0,
                              })
         Rs, alpha_Rs, lensing_eff = ru.get_nfw_kwargs(halos['halo_mass'], 
                                                       halos['stellar_mass'],
-                                                      halos['halo_z'],
+                                                      halos['z'],
                                                       self.z_src)
         halos['Rs'] = Rs
         halos['alpha_Rs'] = alpha_Rs

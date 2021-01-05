@@ -1,18 +1,20 @@
 cosmodc2:
+    cosmology:
+      H0: 71.0
     10450:
       ra: {min: 66.00028180389717, max: 68.99736158149018}
       dec: {min: -46.58679747280085, max: -43.39814365668347}
     column_names:
       ra_true: ra
       dec_true: dec
-      redshift_true: gal_z
+      redshift_true: z
       convergence: wl_kappa
       shear1: gamma1
       shear2: gamma2
       halo_mass: halo_mass
       stellar_mass: stellar_mass
       is_central: is_central
-      baseDC2/target_halo_redshift: halo_z
+      baseDC2/target_halo_redshift: z
 
 
 
