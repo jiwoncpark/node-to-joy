@@ -138,7 +138,7 @@ def sample_in_aperture(N, radius):
         (RA, dec) of the angular offsets in deg
 
     """
-    c = get_skycoord(20, 30) # absolute pos doesn't matter
+    c = get_skycoord(0, 0) # absolute pos doesn't matter
     area = u.Quantity(np.pi*radius**2.0, unit='deg2')
     pos = uniform_around(c, area, size=N)
     ra, dec = c.spherical_offsets_to(pos) # roundabout but does the job...
