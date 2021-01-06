@@ -1,5 +1,6 @@
-git+https://github.com/jiwoncpark/lenstronomy.git@master
-git+https://github.com/jiwoncpark/skypy.git@master
+numba
+git+https://github.com/sibirrer/lenstronomy.git@master
+skypy
 #torch
 #torchvision
 #tb-nightly

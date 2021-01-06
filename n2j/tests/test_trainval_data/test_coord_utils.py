@@ -4,9 +4,10 @@ import healpy as hp
 from n2j.trainval_data import coord_utils as cu
 from scipy import stats
 
+
 class TestCoordUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods
-    
+
     """
 
     @classmethod
@@ -43,7 +44,7 @@ class TestCoordUtils(unittest.TestCase):
         """Test uniform distribution of samples
 
         """
-        radius = 3.0/60.0 # deg
+        radius = 3.0/60.0  # deg
         x, y = cu.sample_in_aperture(10000, radius=radius)
         r2 = x**2 + y**2
         ang = np.arctan2(y, x)
@@ -73,7 +74,7 @@ class TestCoordUtils(unittest.TestCase):
 
         """
         nside_in = 2
-        nside_out = nside_in*2 # must differ by 1 order for this test
+        nside_out = nside_in*2  # must differ by 1 order for this test
         npix_in = hp.nside2npix(nside_in)
         npix_out = hp.nside2npix(nside_out)
         pix_i = 5
@@ -97,13 +98,13 @@ class TestCoordUtils(unittest.TestCase):
         # but the output is in RING ID, which was reordered in the first place
         desired_all = hp.reorder(np.arange(npix_out), r2n=True).reshape((npix_in, 4))
         desired_ring = desired_all[hp.ring2nest(nside_in, pix_i), :]
-        np.testing.assert_array_equal(np.sort(desired_ring), 
-                                      [14, 26, 27, 43], 
-                                      "visual")  
+        np.testing.assert_array_equal(np.sort(desired_ring),
+                                      [14, 26, 27, 43],
+                                      "visual")
         desired_nest = hp.ring2nest(nside_out, desired_ring)
-        np.testing.assert_array_equal(np.sort(actual), 
-                                      np.sort(desired_nest), 
-                                      "input in RING") 
+        np.testing.assert_array_equal(np.sort(actual),
+                                      np.sort(desired_nest),
+                                      "input in RING")
 
     def test_match(self):
         """Test correctness of matching
@@ -118,13 +119,14 @@ class TestCoordUtils(unittest.TestCase):
                                            ra_cat, dec_cat, 0.5)
         np.testing.assert_array_equal(constraint, [True, True, False])
         np.testing.assert_array_equal(i_cat, [0, 3])
-        np.testing.assert_array_almost_equal(dist, 
-                                             [fake_dist, fake_dist], 
+        np.testing.assert_array_almost_equal(dist,
+                                             [fake_dist, fake_dist],
                                              decimal=4)
 
     @classmethod
     def tearDownClass(cls):
         pass
+
 
 if __name__ == '__main__':
     unittest.main()
