@@ -180,11 +180,12 @@ def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     lensing_eff = np.empty(n_halos)
     for h in range(n_halos):
         lens_cosmo = LensCosmo(z_lens=halo_z[h], z_source=z_src, cosmo=WMAP7)
-        lensing_eff = lens_cosmo.dds/lens_cosmo.ds
+        eff = lens_cosmo.dds/lens_cosmo.ds
         Rs_angle_h, alpha_Rs_h = lens_cosmo.nfw_physical2angle(M=halo_mass[h],
                                                                c=c_200[h])
         Rs_angle[h] = Rs_angle_h
         alpha_Rs[h] = alpha_Rs_h
+        lensing_eff[h] = eff
     return Rs_angle, alpha_Rs, lensing_eff
 
 

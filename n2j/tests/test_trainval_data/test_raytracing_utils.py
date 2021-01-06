@@ -22,8 +22,8 @@ class TestRaytracingUtils(unittest.TestCase):
         cls.stellar_mass = np.array([1e12, 5e12, 1e13])
         cls.halo_z = np.array([1.5, 1.0, 1.2])
         cls.z_src = 2.0
-        cls.halo_ra = np.array([1.0, 2.0, 0.5])/60.0 # deg
-        cls.halo_dec = np.array([1.0, 0.5, 2.0])/60.0 # deg
+        cls.halo_ra = np.array([1.0, 2.0, 0.5])/60.0  # deg
+        cls.halo_dec = np.array([1.0, 0.5, 2.0])/60.0  # deg
 
     def test_get_healpix_bounds(self):
         bounds = ru.get_healpix_bounds(self.healpix, edge_buffer=3.0/60.0)
