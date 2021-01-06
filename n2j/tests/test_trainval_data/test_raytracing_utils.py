@@ -5,9 +5,10 @@ import shutil
 import pandas as pd
 from n2j.trainval_data import raytracing_utils as ru
 
+
 class TestRaytracingUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods
-    
+
     """
 
     @classmethod
@@ -35,7 +36,7 @@ class TestRaytracingUtils(unittest.TestCase):
         assert bounds['min_dec'] < bounds['max_dec']
 
     def test_get_los_halos_mass_dist_cut(self):
-        """Test if the `get_los_halos` method applies the correct mass and 
+        """Test if the `get_los_halos` method applies the correct mass and
         position cuts
 
         """
@@ -54,11 +55,11 @@ class TestRaytracingUtils(unittest.TestCase):
         df_gen = pd.read_csv(test_cosmodc2_path, index_col=None, chunksize=2)
         # Generate halos
         test_halos_path = os.path.join(self.out_dir, 'halos.csv')
-        halos = ru.get_los_halos(df_gen, 
-                                 ra_los=0.0, dec_los=0.0, 
-                                 z_src=self.z_src, 
-                                 fov=6.0, 
-                                 mass_cut=11.0, 
+        halos = ru.get_los_halos(df_gen,
+                                 ra_los=0.0, dec_los=0.0,
+                                 z_src=self.z_src,
+                                 fov=6.0,
+                                 mass_cut=11.0,
                                  out_path=test_halos_path)
         assert halos.shape[0] == 3
 
@@ -67,63 +68,24 @@ class TestRaytracingUtils(unittest.TestCase):
 
         """
         np.random.seed(123)
-        N = 30 
+        N = 30
         resolution = 0.2
         out_path = os.path.join(self.out_dir, 'sightlines.csv')
-        sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path, 
+        sightlines = ru.get_sightlines_on_grid(self.healpix, N, out_path,
                                                dist_thres=resolution, test=True)
-        np.testing.assert_array_equal(sightlines.shape[0], N, 
+        np.testing.assert_array_equal(sightlines.shape[0], N,
                                       err_msg='wrong number of sightlines')
         np.testing.assert_array_less(sightlines['eps'].values, resolution,
                                      err_msg='some LOS not satisfying dist cut')
-
-    def test_get_nfw_kwargs(self):
-        """Test if the vectorization across halos returns the same values
-        as an explicit loop
-
-        """
-        def get_nfw_kwargs_loop(halo_mass, stellar_mass, halo_z, z_src):
-            from lenstronomy.Cosmo.lens_cosmo import LensCosmo
-            from astropy.cosmology import WMAP7   # WMAP 7-year cosmology
-            c_200 = ru.get_concentration(halo_mass, stellar_mass)
-            n_halos = len(halo_mass)
-            halo_Rs, halo_alpha_Rs = np.empty(n_halos), np.empty(n_halos)
-            halo_lensing_eff = np.empty(n_halos)
-            for halo_i in range(n_halos):
-                lens_cosmo = LensCosmo(z_lens=halo_z[halo_i], 
-                                       z_source=z_src, 
-                                       cosmo=WMAP7)
-                Rs_angle, alpha_Rs = lens_cosmo.nfw_physical2angle(M=halo_mass[halo_i],
-                                                                   c=c_200[halo_i])
-                rho0, Rs, c, r200, M200 = lens_cosmo.nfw_angle2physical(Rs_angle=Rs_angle, 
-                                                                        alpha_Rs=alpha_Rs)
-                lensing_eff = lens_cosmo.dd*lens_cosmo.dds/lens_cosmo.ds
-                halo_Rs[halo_i] = Rs
-                halo_alpha_Rs[halo_i] = alpha_Rs
-                halo_lensing_eff[halo_i] = lensing_eff
-            return halo_Rs, halo_alpha_Rs, halo_lensing_eff
-        np.random.seed(123)
-        Rs, alpha_Rs, lensing_eff = get_nfw_kwargs_loop(self.halo_mass, 
-                                                        self.stellar_mass, 
-                                                        self.halo_z, 
-                                                        self.z_src)
-        np.random.seed(123)
-        Rs_vec, alpha_Rs_vec, lensing_eff_vec = ru.get_nfw_kwargs(self.halo_mass, 
-                                                              self.stellar_mass, 
-                                                              self.halo_z, 
-                                                              self.z_src)
-        np.testing.assert_array_almost_equal(Rs_vec, Rs)
-        np.testing.assert_array_almost_equal(alpha_Rs_vec, alpha_Rs)
-        np.testing.assert_array_almost_equal(lensing_eff_vec, lensing_eff)
 
     def test_get_concentration(self):
         """Test mass-concentration relation at extreme values
 
         """
         c_0 = 3.19
-        c200_at_stellar_mass = ru.get_concentration(1.0, 1.0, 
+        c200_at_stellar_mass = ru.get_concentration(1.0, 1.0,
                       m=-0.10, A=3.44, trans_M_ratio=430.49, c_0=c_0)
-        c200_at_high_halo_mass = ru.get_concentration(10.0**5, 1.0, 
+        c200_at_high_halo_mass = ru.get_concentration(10.0**5, 1.0,
                       m=-0.10, A=3.44, trans_M_ratio=430.49, c_0=c_0)
         np.testing.assert_almost_equal(c200_at_stellar_mass, 6.060380052400085,
                                        err_msg='halo mass at stellar mass')
@@ -150,7 +112,7 @@ class TestRaytracingUtils(unittest.TestCase):
                              'center_x': self.halo_ra*3600.0,
                              'center_y': self.halo_dec*3600.0,
                              })
-        Rs, alpha_Rs, lensing_eff = ru.get_nfw_kwargs(halos['halo_mass'], 
+        Rs, alpha_Rs, lensing_eff = ru.get_nfw_kwargs(halos['halo_mass'],
                                                       halos['stellar_mass'],
                                                       halos['z'],
                                                       self.z_src)
@@ -159,10 +121,10 @@ class TestRaytracingUtils(unittest.TestCase):
         halos['lensing_eff'] = lensing_eff
         halos.reset_index(drop=True, inplace=True)
         halos.to_csv(halo_path, index=None)
-        ru.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los, 
-                                           z_src, fov, False, False,
-                                           n_kappa_samples, mass_cut, 
-                                           self.out_dir, test=True)
+        ru.raytrace_single_sightline(idx, self.healpix, ra_los, dec_los,
+                                     z_src, fov, False, False,
+                                     n_kappa_samples, mass_cut,
+                                     self.out_dir, test=True)
         kappa_samples_path = '{:s}/kappa_samples_sightline={:d}.npy'.format(self.out_dir, idx)
         kappa_samples = np.load(kappa_samples_path)
         assert len(kappa_samples) == n_kappa_samples
