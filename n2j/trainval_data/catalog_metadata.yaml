@@ -1,4 +1,24 @@
 cosmodc2:
+    nside: 32
+    lensing_nside: 4096
+    cosmology:
+      H0: 71.0
+    10450:
+      ra: {min: 66.00028180389717, max: 68.99736158149018}
+      dec: {min: -46.58679747280085, max: -43.39814365668347}
+    column_names:
+      ra_true: ra
+      dec_true: dec
+      redshift_true: z
+      convergence: kappa
+      shear1: gamma1
+      shear2: gamma2
+      halo_mass: halo_mass
+      stellar_mass: stellar_mass
+      is_central: is_central
+skysim5000:
+    nside: 32
+    lensing_nside: 8192
     cosmology:
       H0: 71.0
     10450:
@@ -11,10 +31,9 @@ cosmodc2:
       convergence: wl_kappa
       shear1: gamma1
       shear2: gamma2
-      halo_mass: halo_mass
+      baseDC2/sod_halo_mass: halo_mass
       stellar_mass: stellar_mass
       is_central: is_central
-      baseDC2/target_halo_redshift: z
 
 
 

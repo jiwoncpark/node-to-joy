@@ -1,3 +1,8 @@
+"""This module contains utility functions for dealing with sky coordinates,
+sky distances, and healpix grids.
+
+"""
+
 import math
 import numpy as np
 import healpy as hp
