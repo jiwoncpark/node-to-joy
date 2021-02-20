@@ -28,8 +28,7 @@ def get_nfw_kwargs(halo_mass, stellar_mass, halo_z, z_src):
     return Rs_angle, alpha_Rs, lensing_eff
 
 
-def get_kappa_map(lens_model, nfw_kwargs, fov, save_path,
-                  x_grid=None, y_grid=None):
+def get_kappa_map(lens_model, nfw_kwargs, fov, save_path, x_grid=None, y_grid=None):
     """Plot a map of kappa and save to disk
 
     """
