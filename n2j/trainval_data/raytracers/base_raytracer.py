@@ -18,7 +18,7 @@ class BaseRaytracer(ABC):
 
     def __init__(self,
                  out_dir: str = '.',
-                 test: bool = False,):
+                 debug: bool = False,):
         """
         Parameters
         ----------
@@ -31,7 +31,7 @@ class BaseRaytracer(ABC):
         self.out_dir = out_dir
         if not os.path.exists(self.out_dir):
             os.mkdir(self.out_dir)
-        self.test = test
+        self.debug = debug
         # Paths for output data files
         self._define_paths()
         # Optionally overridden
@@ -60,10 +60,6 @@ class BaseRaytracer(ABC):
 
     @abstractmethod
     def get_pointings_iterator(self):
-        return NotImplementedError
-
-    @abstractmethod
-    def get_gals_iterator(self):
         return NotImplementedError
 
     @abstractmethod

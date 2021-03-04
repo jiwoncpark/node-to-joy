@@ -22,7 +22,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
     LENSING_NSIDE = 4096
 
     def __init__(self, out_dir, fov, n_kappa_samples, healpix,
-                 mass_cut=11, n_sightlines=1000, test=False):
+                 mass_cut=11, n_sightlines=1000, debug=False):
         """
         Parameters
         ----------
@@ -36,14 +36,14 @@ class CosmoDC2Raytracer(BaseRaytracer):
 
         """
         np.random.seed(123)
-        BaseRaytracer.__init__(self, out_dir, test)
+        BaseRaytracer.__init__(self, out_dir, debug)
         self.fov = fov
         self.mass_cut = mass_cut
         self.n_sightlines = n_sightlines
         self.n_kappa_samples = n_kappa_samples
         self.healpix = healpix
         self._get_pointings()
-        self.test = test
+        self.debug = debug
         logged_cols = ['idx', 'kappa', 'gamma1', 'gamma2', 'weighted_mass_sum']
         uncalib_df = pd.DataFrame(columns=logged_cols)
         uncalib_df.to_csv(self.uncalib_path, index=None)
@@ -55,27 +55,11 @@ class CosmoDC2Raytracer(BaseRaytracer):
         cat_path = os.path.join(data.__path__[0],
                                 'cosmodc2_{:d}'.format(healpix), 'raw',
                                 'cosmodc2_pointings_{:d}.csv'.format(healpix))
-        if self.test:
+        if self.debug:
             cat = pd.read_csv(cat_path, chunksize=50, nrows=1000,
                               usecols=columns)
             # Include z~2 galaxies
             cat['redshift'] = np.maximum(0.1, 2.0 + np.random.randn(100))
-        else:
-            cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
-                              usecols=columns)
-        return cat
-
-    def get_gals_iterator(self, healpix, columns, chunksize=100000):
-        """Get an iterator over the galaxy catalog defining the line-of-sight
-        galaxies
-
-        """
-        cat_path = os.path.join(data.__path__[0],
-                                'cosmodc2_{:d}'.format(healpix), 'raw',
-                                'cosmodc2_gals_{:d}.csv'.format(healpix))
-        if self.test:
-            cat = pd.read_csv(cat_path, chunksize=50, nrows=1000,
-                              usecols=columns)
         else:
             cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
                               usecols=columns)
@@ -89,7 +73,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
         cat_path = os.path.join(data.__path__[0],
                                 'cosmodc2_{:d}'.format(healpix), 'raw',
                                 'cosmodc2_halos_{:d}.csv'.format(healpix))
-        if self.test:
+        if self.debug:
             cat = pd.read_csv(cat_path, chunksize=50, nrows=1000,
                               usecols=columns)
         else:
@@ -134,12 +118,12 @@ class CosmoDC2Raytracer(BaseRaytracer):
                                      dec_los=sightline['dec'],
                                      z_src=sightline['z'],
                                      fov=self.fov,
-                                     map_kappa=self.test,
-                                     map_gamma=self.test,
+                                     map_kappa=self.debug,
+                                     map_gamma=self.debug,
                                      n_kappa_samples=self.n_kappa_samples,
                                      mass_cut=self.mass_cut,
                                      out_dir=self.out_dir,
-                                     test=self.test)
+                                     test=self.debug)
 
     def parallel_raytrace(self):
         """Raytrace through multiple sightlines in parallel
