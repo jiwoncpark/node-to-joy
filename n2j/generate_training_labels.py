@@ -23,21 +23,22 @@ if __name__ == '__main__':
         kappa_sampler.parallel_raytrace()
         kappa_sampler.apply_calibration()
     # Use this to infer the mean kappa contribution of new sightlines
-    if False:
+    if True:
         train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_10450',
                                               fov=0.85,
                                               healpix=10450,
-                                              n_sightlines=10000,  # many more LOS
+                                              n_sightlines=20000,  # many more LOS
                                               mass_cut=11.0,
                                               n_kappa_samples=0)  # no sampling
         train_Y_generator.parallel_raytrace()
         train_Y_generator.apply_calibration()
-    # Use on a different healpix
-    train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_9559',
-                                          fov=0.85,
-                                          healpix=9559,
-                                          n_sightlines=1000,  # many more LOS
-                                          mass_cut=11.0,
-                                          n_kappa_samples=0)  # no sampling
-    train_Y_generator.parallel_raytrace()
-    train_Y_generator.apply_calibration()
+    if False:
+        # Use on a different healpix
+        train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_9559',
+                                              fov=0.85,
+                                              healpix=9559,
+                                              n_sightlines=1000,  # many more LOS
+                                              mass_cut=11.0,
+                                              n_kappa_samples=0)  # no sampling
+        train_Y_generator.parallel_raytrace()
+        train_Y_generator.apply_calibration()
