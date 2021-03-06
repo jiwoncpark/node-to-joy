@@ -215,7 +215,8 @@ class BaseGaussianNLL(ABC):
         np.array of shape `[self.batch_size, n_samples, self.Y_dim]`
             samples
         """
-        samples = torch.zeros([self.batch_size, n_samples, self.Y_dim])
+        samples = torch.zeros([self.batch_size, n_samples, self.Y_dim],
+                              device=self.device)
         for b in range(self.batch_size):
             tril = torch.zeros([self.Y_dim, self.Y_dim],
                                device=self.device,
@@ -376,7 +377,7 @@ class DoubleGaussianNLL(BaseGaussianNLL):
         samples = torch.zeros([self.batch_size, n_samples, self.Y_dim],
                               device=self.device)
         # Determine first vs. second Gaussian
-        unif2 = torch.rand(self.batch_size, n_samples)
+        unif2 = torch.rand(self.batch_size, n_samples, device=self.device)
         second_gaussian = (self.w2 > unif2)
         # Sample from second Gaussian
         samples2 = self.sample_full_rank(n_samples, self.mu2,

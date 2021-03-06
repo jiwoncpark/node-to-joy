@@ -4,11 +4,13 @@
 
 import os
 import multiprocessing
+from functools import cached_property
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 from tqdm import tqdm
 import torch
+from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
 from n2j import data
 from n2j.trainval_data import coord_utils as cu
@@ -30,17 +32,18 @@ class CosmoDC2Graph(BaseGraph):
 
     def __init__(self, healpix, raytracing_out_dir, aperture_size, n_data,
                  features,
-                 debug=False,
-                 transform=None, pre_transform=None, pre_filter=None):
+                 debug=False):
         self.healpix = healpix
         self.features = features
         self.closeness = 0.5/60.0  # deg, edge criterion between neighbors
         self.mag_lower = 18.5  # lower magnitude cut, excludes stars
-        self.mag_upper = 24.5  # upper magnitude cut, excludes small halos
+        # LSST gold sample i-band mag (Gorecki et al 2014)
+        self.mag_upper = 25.3  # upper magnitude cut, excludes small halos
         root = os.path.join(data.__path__[0], 'cosmodc2_{:d}'.format(healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
-                           n_data, debug,
-                           transform, pre_transform, pre_filter)
+                           n_data, debug)
+        self.transform_X = None
+        self.transform_Y = None
 
     @property
     def n_features(self):
@@ -79,6 +82,29 @@ class CosmoDC2Graph(BaseGraph):
 
         """
         return [self.processed_file_fmt.format(n) for n in range(self.n_data)]
+
+    @cached_property
+    def data_stats(self):
+        """Statistics of the X, Y data used for standardizing
+
+        """
+        X_mean = 0.0
+        X_std = 0.0
+        Y_mean = 0.0
+        Y_std = 0.0
+        dummy_loader = DataLoader(self,
+                                  batch_size=100,
+                                  shuffle=False,
+                                  num_workers=4,
+                                  drop_last=True)
+        for i, b in enumerate(dummy_loader):
+            X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
+            X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
+            Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
+            Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
+        stats = dict(X_mean=X_mean, X_std=X_std,
+                     Y_mean=Y_mean, Y_std=Y_std)
+        return stats
 
     def get_los_node(self):
         """Properties of the sightline galaxy, with unobservable features
@@ -193,4 +219,8 @@ class CosmoDC2Graph(BaseGraph):
 
     def get(self, idx):
         data = torch.load(self.processed_file_path_fmt.format(idx))
+        if self.transform_X is not None:
+            data.x = self.transform_X(data.x)
+        if self.transform_Y is not None:
+            data.y = self.transform_Y(data.y)
         return data

@@ -72,4 +72,3 @@ class BaseGraph(Dataset):
                                       nrows=self.n_data)
         # Convert deg to arcmin
         # self.sightlines.loc[:, ['ra', 'dec']] *= 60.0
-
