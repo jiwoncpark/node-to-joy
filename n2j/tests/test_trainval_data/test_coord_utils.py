@@ -2,10 +2,12 @@ import unittest
 import numpy as np
 import healpy as hp
 from n2j.trainval_data import coord_utils as cu
+from scipy import stats
+
 
 class TestCoordUtils(unittest.TestCase):
     """A suite of tests verifying the raytracing utility methods
-    
+
     """
 
     @classmethod
@@ -38,6 +40,21 @@ class TestCoordUtils(unittest.TestCase):
         assert isinstance(skycoord_actual, SkyCoord)
         assert skycoord_actual.shape[0] == 3
 
+    def test_sample_in_aperture(self):
+        """Test uniform distribution of samples
+
+        """
+        radius = 3.0/60.0  # deg
+        x, y = cu.sample_in_aperture(10000, radius=radius)
+        r2 = x**2 + y**2
+        ang = np.arctan2(y, x)
+        uniform_rv_r2 = stats.uniform(loc=0, scale=radius**2.0)
+        D, p = stats.kstest(r2, uniform_rv_r2.cdf)
+        np.testing.assert_array_less(0.01, p, err_msg='R2 fails KS test')
+        uniform_rv_ang = stats.uniform(loc=-np.pi, scale=2*np.pi)
+        D, p = stats.kstest(ang, uniform_rv_ang.cdf)
+        np.testing.assert_array_less(0.01, p, err_msg='angle fails KS test')
+
     def test_get_healpix_centers(self):
         """Test if correct sky locations are returned in the cosmoDC2 convention
 
@@ -57,7 +74,7 @@ class TestCoordUtils(unittest.TestCase):
 
         """
         nside_in = 2
-        nside_out = nside_in*2 # must differ by 1 order for this test
+        nside_out = nside_in*2  # must differ by 1 order for this test
         npix_in = hp.nside2npix(nside_in)
         npix_out = hp.nside2npix(nside_out)
         pix_i = 5
@@ -81,13 +98,13 @@ class TestCoordUtils(unittest.TestCase):
         # but the output is in RING ID, which was reordered in the first place
         desired_all = hp.reorder(np.arange(npix_out), r2n=True).reshape((npix_in, 4))
         desired_ring = desired_all[hp.ring2nest(nside_in, pix_i), :]
-        np.testing.assert_array_equal(np.sort(desired_ring), 
-                                      [14, 26, 27, 43], 
-                                      "visual")  
+        np.testing.assert_array_equal(np.sort(desired_ring),
+                                      [14, 26, 27, 43],
+                                      "visual")
         desired_nest = hp.ring2nest(nside_out, desired_ring)
-        np.testing.assert_array_equal(np.sort(actual), 
-                                      np.sort(desired_nest), 
-                                      "input in RING") 
+        np.testing.assert_array_equal(np.sort(actual),
+                                      np.sort(desired_nest),
+                                      "input in RING")
 
     def test_match(self):
         """Test correctness of matching
@@ -102,8 +119,8 @@ class TestCoordUtils(unittest.TestCase):
                                            ra_cat, dec_cat, 0.5)
         np.testing.assert_array_equal(constraint, [True, True, False])
         np.testing.assert_array_equal(i_cat, [0, 3])
-        np.testing.assert_array_almost_equal(dist, 
-                                             [fake_dist, fake_dist], 
+        np.testing.assert_array_almost_equal(dist,
+                                             [fake_dist, fake_dist],
                                              decimal=4)
 
     @classmethod
