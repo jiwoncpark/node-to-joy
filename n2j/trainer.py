@@ -17,6 +17,8 @@ from n2j.trainval_data.trainval_data_utils import Standardizer
 
 
 class Trainer:
+    Y_def = {0: 'k', 1: 'g1', 2: 'g2'}
+
     def __init__(self, device_type, checkpoint_dir='trained_models', seed=123):
         self.device = torch.device(device_type)
         self.seed = seed
@@ -41,7 +43,8 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, features, raytracing_out_dir, healpix, n_data,
-                     is_train, batch_size, aperture_size):
+                     is_train, batch_size, aperture_size,
+                     stop_mean_std_early=False):
         self.batch_size = batch_size
         self.X_dim = len(features)
         self.Y_dim = 3
@@ -50,6 +53,7 @@ class Trainer:
                                 aperture_size=aperture_size,
                                 n_data=n_data,
                                 features=features,
+                                stop_mean_std_early=stop_mean_std_early,
                                 )
         if is_train:
             self.train_dataset = dataset
@@ -226,15 +230,19 @@ class Trainer:
                                                         -1])
         mean_pred = np.mean(samples, axis=-1)  # [batch_size, Y_dim]
         std_pred = np.std(samples, axis=-1)
-        self.logger.add_histogram('absolute precision',
-                                  np.abs(std_pred),
-                                  epoch_i)
-        self.logger.add_histogram('absolute error',
-                                  np.abs((mean_pred - y_val)),
-                                  epoch_i)
-        self.logger.add_histogram('z',
-                                  (mean_pred - y_val)/(std_pred + 1.e-7),
-                                  epoch_i)
+        prec = np.abs(std_pred)
+        err = np.abs((mean_pred - y_val))
+        z = ((mean_pred - y_val)/(std_pred + 1.e-7))
+        for i, name in self.Y_def.items():
+            self.logger.add_histogram('absolute precision/{:s}'.format(name),
+                                      prec[:, i],
+                                      epoch_i)
+            self.logger.add_histogram('absolute error/{:s}'.format(name),
+                                      err[:, i],
+                                      epoch_i)
+            self.logger.add_histogram('z/{:s}'.format(name),
+                                      z[:, i],
+                                      epoch_i)
 
     def __repr__(self):
         keys = ['X_dim', 'features', 'Y_dim', 'out_dim', 'batch_size']

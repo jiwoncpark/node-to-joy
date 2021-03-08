@@ -61,30 +61,31 @@ class GCNNet(nn.Module):
 
 class GATNet(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 hidden_channels=256, heads=1, n_layers=3, dropout=0.0):
+                 hidden_channels=256,
+                 kwargs={}, n_layers=3, dropout=0.0):
         super(GATNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
-        self.heads = heads
         self.n_layers = n_layers
         self.dropout = dropout
+        self.kwargs = kwargs
         self.convs = nn.ModuleList()
         for i in range(self.n_layers-1):
             n_in = self.in_channels if i == 0 else self.hidden_channels
             self.convs.append(GATConv(n_in,
                                       self.hidden_channels,
-                                      heads=self.heads,
                                       aggr='add',
                                       dropout=self.dropout,
-                                      add_self_loops=False))
+                                      add_self_loops=False,
+                                      **self.kwargs))
         # Last layer
         self.convs.append(GATConv(self.hidden_channels,
                                   self.out_channels,
-                                  heads=self.heads,
                                   aggr='add',
                                   dropout=self.dropout,
-                                  add_self_loops=False))
+                                  add_self_loops=False,
+                                  **self.kwargs))
         # self.fc = nn.Linear(self.hidden_channels, out_channels)
 
     def forward(self, data):

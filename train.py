@@ -13,10 +13,11 @@ if __name__ == '__main__':
     trainer.load_dataset(features,
                          raytracing_out_dir='cosmodc2_raytracing_10450',
                          healpix=10450,
-                         n_data=50000,
+                         n_data=20000,
                          is_train=True,
                          batch_size=100,
-                         aperture_size=1.0)
+                         aperture_size=1.0,
+                         stop_mean_std_early=True)
     if True:  # FIXME: must be run after train
         trainer.load_dataset(features,
                              raytracing_out_dir='cosmodc2_raytracing_9559',
@@ -29,7 +30,8 @@ if __name__ == '__main__':
     trainer.configure_model('GATNet', {'hidden_channels': 16,
                                        'n_layers': 3,
                                        'dropout': 0.05,
-                                       'heads': 4})
+                                       'kwargs': {'concat': False,
+                                                  'heads': 4}})
     trainer.configure_optim({'lr': 1.e-3, 'weight_decay': 1.e-5},
                             {'factor': 0.5, 'min_lr': 1.e-7})
     if False:

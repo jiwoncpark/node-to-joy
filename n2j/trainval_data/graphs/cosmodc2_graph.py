@@ -32,6 +32,7 @@ class CosmoDC2Graph(BaseGraph):
 
     def __init__(self, healpix, raytracing_out_dir, aperture_size, n_data,
                  features,
+                 stop_mean_std_early=False,
                  debug=False):
         self.healpix = healpix
         self.features = features
@@ -39,6 +40,7 @@ class CosmoDC2Graph(BaseGraph):
         self.mag_lower = 18.5  # lower magnitude cut, excludes stars
         # LSST gold sample i-band mag (Gorecki et al 2014)
         self.mag_upper = 25.3  # upper magnitude cut, excludes small halos
+        self.stop_mean_std_early = stop_mean_std_early
         root = os.path.join(data.__path__[0], 'cosmodc2_{:d}'.format(healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
@@ -102,6 +104,8 @@ class CosmoDC2Graph(BaseGraph):
             X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
             Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
             Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
+            if self.stop_mean_std_early and i > 100:
+                break
         stats = dict(X_mean=X_mean, X_std=X_std,
                      Y_mean=Y_mean, Y_std=Y_std)
         return stats
