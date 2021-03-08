@@ -1,19 +1,25 @@
 import os
-import sys
 import random
 import datetime
 import json
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
+import torchvision.transforms as transforms
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.losses.nll as losses
 import n2j.models.gnn as gnn
-from n2j.trainval_data.trainval_data_utils import Standardizer
+from n2j.trainval_data.trainval_data_utils import Standardizer, Slicer
+
+
+def get_idx(orig_list, sub_list):
+    idx = []
+    for item in sub_list:
+        idx.append(orig_list.index(item))
+    return idx
 
 
 class Trainer:
@@ -44,9 +50,9 @@ class Trainer:
 
     def load_dataset(self, features, raytracing_out_dir, healpix, n_data,
                      is_train, batch_size, aperture_size,
-                     stop_mean_std_early=False):
+                     stop_mean_std_early=False, sub_features=None):
         self.batch_size = batch_size
-        self.X_dim = len(features)
+        self.X_dim = len(features) if sub_features is None else len(sub_features)
         self.Y_dim = 3
         dataset = CosmoDC2Graph(healpix=healpix,
                                 raytracing_out_dir=raytracing_out_dir,
@@ -58,8 +64,16 @@ class Trainer:
         if is_train:
             self.train_dataset = dataset
             stats = self.train_dataset.data_stats
-            self.transform_X = Standardizer(stats['X_mean'],
-                                            stats['X_std'])
+            if sub_features is not None:
+                idx = get_idx(features, sub_features)
+                slicing = Slicer(idx)
+                norming = Standardizer(stats['X_mean'][:, idx],
+                                       stats['X_std'][:, idx])
+                self.transform_X = transforms.Compose([slicing, norming])
+
+            else:
+                self.transform_X = Standardizer(stats['X_mean'],
+                                                stats['X_std'])
             self.transform_Y = Standardizer(stats['Y_mean'],
                                             stats['Y_std'])
             self.train_dataset.transform_X = self.transform_X
@@ -214,7 +228,8 @@ class Trainer:
                     out = self.model(batch)
                     # Get pred samples
                     self.nll_obj.set_trained_pred(out)
-                    self.logger.add_histogram('w2', self.nll_obj.w2, epoch_i)
+                    if 'Double' in self.nll_type:
+                        self.logger.add_histogram('w2', self.nll_obj.w2, epoch_i)
                     mc_samples = self.nll_obj.sample(Y_mean,
                                                      Y_std,
                                                      n_samples,
@@ -234,6 +249,10 @@ class Trainer:
         err = np.abs((mean_pred - y_val))
         z = ((mean_pred - y_val)/(std_pred + 1.e-7))
         for i, name in self.Y_def.items():
+            self.logger.add_scalars('metrics/{:s}.format(name)',
+                                    dict(med_ae=np.median(err, axis=0)[i],
+                                         med_prec=np.median(prec, axis=0)[i]),
+                                    epoch_i)
             self.logger.add_histogram('absolute precision/{:s}'.format(name),
                                       prec[:, i],
                                       epoch_i)
@@ -245,8 +264,8 @@ class Trainer:
                                       epoch_i)
 
     def __repr__(self):
-        keys = ['X_dim', 'features', 'Y_dim', 'out_dim', 'batch_size']
-        keys += ['epoch', 'n_epochs']
+        keys = ['X_dim', 'features', 'sub_features', 'Y_dim', 'out_dim']
+        keys += ['batch_size', 'epoch', 'n_epochs']
         vals = [getattr(self, k) for k in keys if hasattr(self, k)]
         metadata = dict(zip(keys, vals))
         if hasattr(self, 'model_kwargs'):

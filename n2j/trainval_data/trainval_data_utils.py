@@ -10,3 +10,11 @@ class Standardizer:
 
     def __call__(self, x):
         return (x - self.mean)/self.std
+
+
+class Slicer:
+    def __init__(self, feature_idx):
+        self.feature_idx = feature_idx
+
+    def __call__(self, x):
+        return x[:, self.feature_idx]
