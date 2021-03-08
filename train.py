@@ -26,12 +26,13 @@ if __name__ == '__main__':
                              batch_size=100,  # FIXME: must be same as train
                              aperture_size=1.0)
     trainer.configure_loss_fn('DoubleGaussianNLL')
-    trainer.configure_model('GATNet', {'hidden_channels': 256,
+    trainer.configure_model('GATNet', {'hidden_channels': 16,
                                        'n_layers': 3,
-                                       'dropout': 0.05})
-    trainer.configure_optim({'lr': 1.e-4, 'weight_decay': 1.e-5},
+                                       'dropout': 0.05,
+                                       'heads': 4})
+    trainer.configure_optim({'lr': 1.e-3, 'weight_decay': 1.e-5},
                             {'factor': 0.5, 'min_lr': 1.e-7})
-    if True:
+    if False:
         trainer.load_state('/home/jwp/stage/sl/n2j/test_run/DoubleGaussianNLL_epoch=0_03-05-2021_23:41.mdl')
-    trainer.train(n_epochs=100)
+    trainer.train(n_epochs=50)
     print(trainer)
