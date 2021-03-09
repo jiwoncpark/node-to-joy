@@ -5,19 +5,87 @@
 import os
 import multiprocessing
 from functools import cached_property
+import bisect
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 from tqdm import tqdm
 import torch
+from torch.utils.data.dataset import ConcatDataset
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
 from n2j import data
 from n2j.trainval_data import coord_utils as cu
 
 
-class CosmoDC2Graph(BaseGraph):
-    """Set of graphs representing a subset or all of the CosmoDC2 field
+class CosmoDC2Graph(ConcatDataset):
+    """Concatenation of multiple CosmoDC2GraphHealpix instances,
+    with an added data transformation functionality
+
+    """
+    def __init__(self, healpixes, raytracing_out_dirs, aperture_size,
+                 n_data, features, stop_mean_std_early=False):
+        self.stop_mean_std_early = stop_mean_std_early
+        self.n_datasets = len(healpixes)
+        datasets = []
+        for i in range(self.n_datasets):
+            graph_hp = CosmoDC2GraphHealpix(healpixes[i],
+                                            raytracing_out_dirs[i],
+                                            aperture_size,
+                                            n_data[i],
+                                            features
+                                            )
+            datasets.append(graph_hp)
+        ConcatDataset.__init__(self, datasets)
+        self.transform_X = None
+        self.transform_Y = None
+
+    @cached_property
+    def data_stats(self):
+        """Statistics of the X, Y data used for standardizing
+
+        """
+        X_mean = 0.0
+        X_std = 0.0
+        Y_mean = 0.0
+        Y_std = 0.0
+        dummy_loader = DataLoader(self,
+                                  batch_size=100,
+                                  shuffle=False,
+                                  num_workers=4,
+                                  drop_last=True)
+        for i, b in enumerate(dummy_loader):
+            X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
+            X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
+            Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
+            Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
+            if self.stop_mean_std_early and i > 100:
+                break
+        stats = dict(X_mean=X_mean, X_std=X_std,
+                     Y_mean=Y_mean, Y_std=Y_std)
+        return stats
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed"
+                                 " dataset length")
+            idx = len(self) + idx
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        data = self.datasets[dataset_idx][sample_idx]
+        if self.transform_X is not None:
+            data.x = self.transform_X(data.x)
+        if self.transform_Y is not None:
+            data.y = self.transform_Y(data.y)
+        return data
+
+
+class CosmoDC2GraphHealpix(BaseGraph):
+    """Set of graphs representing a single healpix of the CosmoDC2 field
 
     """
     columns = ['ra', 'dec', 'galaxy_id', 'redshift']
@@ -42,8 +110,6 @@ class CosmoDC2Graph(BaseGraph):
         root = os.path.join(data.__path__[0], 'cosmodc2_{:d}'.format(healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
-        self.transform_X = None
-        self.transform_Y = None
 
     @property
     def n_features(self):
@@ -82,29 +148,6 @@ class CosmoDC2Graph(BaseGraph):
 
         """
         return [self.processed_file_fmt.format(n) for n in range(self.n_data)]
-
-    @cached_property
-    def data_stats(self):
-        """Statistics of the X, Y data used for standardizing
-
-        """
-        X_mean = 0.0
-        X_std = 0.0
-        Y_mean = 0.0
-        Y_std = 0.0
-        dummy_loader = DataLoader(self,
-                                  batch_size=100,
-                                  shuffle=False,
-                                  num_workers=4,
-                                  drop_last=True)
-        for i, b in enumerate(dummy_loader):
-            X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
-            X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
-            Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
-            Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
-        stats = dict(X_mean=X_mean, X_std=X_std,
-                     Y_mean=Y_mean, Y_std=Y_std)
-        return stats
 
     def get_los_node(self):
         """Properties of the sightline galaxy, with unobservable features
@@ -219,8 +262,4 @@ class CosmoDC2Graph(BaseGraph):
 
     def get(self, idx):
         data = torch.load(self.processed_file_path_fmt.format(idx))
-        if self.transform_X is not None:
-            data.x = self.transform_X(data.x)
-        if self.transform_Y is not None:
-            data.y = self.transform_Y(data.y)
         return data

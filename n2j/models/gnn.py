@@ -22,25 +22,29 @@ def get_zero_nodes(batch_idx):
 
 class GCNNet(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 hidden_channels=256, n_layers=3, dropout=0.0):
+                 hidden_channels=256, n_layers=3, dropout=0.0,
+                 kwargs={}):
         super(GCNNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.n_layers = n_layers
         self.dropout = dropout
+        self.kwargs = kwargs
         self.convs = nn.ModuleList()
         for i in range(self.n_layers-1):
             n_in = self.in_channels if i == 0 else self.hidden_channels
             self.convs.append(GCNConv(n_in,
                                       self.hidden_channels,
                                       aggr='add',
-                                      add_self_loops=False))
+                                      add_self_loops=False,
+                                      **self.kwargs))
         # Last layer
         self.convs.append(GCNConv(self.hidden_channels,
                                   self.out_channels,
                                   aggr='add',
-                                  add_self_loops=False))
+                                  add_self_loops=False,
+                                  **self.kwargs))
         # self.fc = nn.Linear(self.hidden_channels, out_channels)
 
     def forward(self, data):
@@ -57,13 +61,15 @@ class GCNNet(nn.Module):
 
 class GATNet(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 hidden_channels=256, n_layers=3, dropout=0.0):
+                 hidden_channels=256,
+                 kwargs={}, n_layers=3, dropout=0.0):
         super(GATNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.n_layers = n_layers
         self.dropout = dropout
+        self.kwargs = kwargs
         self.convs = nn.ModuleList()
         for i in range(self.n_layers-1):
             n_in = self.in_channels if i == 0 else self.hidden_channels
@@ -71,13 +77,15 @@ class GATNet(nn.Module):
                                       self.hidden_channels,
                                       aggr='add',
                                       dropout=self.dropout,
-                                      add_self_loops=False))
+                                      add_self_loops=False,
+                                      **self.kwargs))
         # Last layer
         self.convs.append(GATConv(self.hidden_channels,
                                   self.out_channels,
                                   aggr='add',
                                   dropout=self.dropout,
-                                  add_self_loops=False))
+                                  add_self_loops=False,
+                                  **self.kwargs))
         # self.fc = nn.Linear(self.hidden_channels, out_channels)
 
     def forward(self, data):
@@ -94,13 +102,15 @@ class GATNet(nn.Module):
 
 class SageNet(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 hidden_channels=256, n_layers=3, dropout=0.0):
+                 hidden_channels=256, n_layers=3, dropout=0.0,
+                 kwargs={}):
         super(SageNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.n_layers = n_layers
         self.dropout = dropout
+        self.kwargs = kwargs
         self.convs = nn.ModuleList()
         for i in range(self.n_layers-1):
             n_in = self.in_channels if i == 0 else self.hidden_channels
@@ -108,13 +118,15 @@ class SageNet(nn.Module):
                                        self.hidden_channels,
                                        aggr='add',
                                        normalize=True,  # otherwise explode
-                                       root_weight=False))
+                                       root_weight=False,
+                                       **self.kwargs))
         # Last layer
         self.convs.append(SAGEConv(self.hidden_channels,
                                    self.out_channels,
                                    aggr='add',
                                    normalize=True,  # otherwise explode
-                                   root_weight=False))
+                                   root_weight=False,
+                                   **self.kwargs))
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
@@ -130,13 +142,15 @@ class SageNet(nn.Module):
 
 class GravNet(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 hidden_channels=256, n_layers=3, dropout=0.0):
+                 hidden_channels=256, n_layers=3, dropout=0.0,
+                 kwargs={}):
         super(GravNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.n_layers = n_layers
         self.dropout = dropout
+        self.kwargs = kwargs
         self.convs = nn.ModuleList()
         for i in range(self.n_layers-1):
             n_in = self.in_channels if i == 0 else self.hidden_channels
@@ -145,14 +159,16 @@ class GravNet(nn.Module):
                                           aggr='add',
                                           space_dimensions=3,
                                           propagate_dimensions=2,
-                                          k=20))
+                                          k=20,
+                                          **self.kwargs))
         # Last layer
         self.convs.append(GravNetConv(self.hidden_channels,
                                       self.out_channels,
                                       aggr='add',
                                       space_dimensions=3,
                                       propagate_dimensions=2,
-                                      k=20))
+                                      k=20,
+                                      **self.kwargs))
 
     def forward(self, data):
         x, batch = data.x, data.batch  # edge information not used

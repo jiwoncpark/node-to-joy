@@ -13,6 +13,7 @@ from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 
 if __name__ == '__main__':
     # Explicitly sample kappas for ~1000 sightlines first (slow)
+    healpix = 10327
     if False:
         kappa_sampler = CosmoDC2Raytracer(out_dir='kappa_sampling',
                                           fov=0.85,
@@ -24,10 +25,10 @@ if __name__ == '__main__':
         kappa_sampler.apply_calibration()
     # Use this to infer the mean kappa contribution of new sightlines
     if True:
-        train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_10450',
+        train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_{:d}'.format(healpix),
                                               fov=0.85,
-                                              healpix=10450,
-                                              n_sightlines=20000,  # many more LOS
+                                              healpix=healpix,
+                                              n_sightlines=2000,  # many more LOS
                                               mass_cut=11.0,
                                               n_kappa_samples=0)  # no sampling
         train_Y_generator.parallel_raytrace()

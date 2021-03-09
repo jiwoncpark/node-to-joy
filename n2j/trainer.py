@@ -1,22 +1,37 @@
 import os
-import sys
 import random
 import datetime
 import json
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
+import torchvision.transforms as transforms
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.losses.nll as losses
 import n2j.models.gnn as gnn
-from n2j.trainval_data.trainval_data_utils import Standardizer
+from n2j.trainval_data.trainval_data_utils import Standardizer, Slicer
+
+
+def get_idx(orig_list, sub_list):
+    idx = []
+    for item in sub_list:
+        idx.append(orig_list.index(item))
+    return idx
+
+
+def is_decreasing(arr):
+    """Returns True if array is strictly monotonically decreasing
+
+    """
+    return np.all(np.diff(arr) < 0.0)
 
 
 class Trainer:
+    Y_def = {0: 'k', 1: 'g1', 2: 'g2'}
+
     def __init__(self, device_type, checkpoint_dir='trained_models', seed=123):
         self.device = torch.device(device_type)
         self.seed = seed
@@ -26,6 +41,7 @@ class Trainer:
             os.mkdir(self.checkpoint_dir)
         self.logger = SummaryWriter(os.path.join(self.checkpoint_dir, 'runs'))
         self.epoch = 0
+        self.early_stop_crit = []
         self.last_saved_val_loss = np.inf
         self.model_path = 'dummy_path_name'
 
@@ -40,22 +56,25 @@ class Trainer:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def load_dataset(self, features, raytracing_out_dir, healpix, n_data,
-                     is_train, batch_size, aperture_size):
+    def load_dataset(self, data_kwargs, is_train, batch_size,
+                     sub_features=None):
         self.batch_size = batch_size
-        self.X_dim = len(features)
+        features = data_kwargs['features']
+        self.X_dim = len(features) if sub_features is None else sub_features
         self.Y_dim = 3
-        dataset = CosmoDC2Graph(healpix=healpix,
-                                raytracing_out_dir=raytracing_out_dir,
-                                aperture_size=aperture_size,
-                                n_data=n_data,
-                                features=features,
-                                )
+        dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
             stats = self.train_dataset.data_stats
-            self.transform_X = Standardizer(stats['X_mean'],
-                                            stats['X_std'])
+            if sub_features is not None:
+                idx = get_idx(features, sub_features)
+                slicing = Slicer(idx)
+                norming = Standardizer(stats['X_mean'][:, idx],
+                                       stats['X_std'][:, idx])
+                self.transform_X = transforms.Compose([slicing, norming])
+            else:
+                self.transform_X = Standardizer(stats['X_mean'],
+                                                stats['X_std'])
             self.transform_Y = Standardizer(stats['Y_mean'],
                                             stats['Y_std'])
             self.train_dataset.transform_X = self.transform_X
@@ -83,6 +102,7 @@ class Trainer:
         self.out_dim = nll_obj.out_dim
 
     def configure_model(self, model_name, model_kwargs={}):
+        self.model_name = model_name
         self.model_kwargs = model_kwargs
         self.model = getattr(gnn, model_name)(in_channels=self.X_dim,
                                               out_channels=self.out_dim,
@@ -102,15 +122,14 @@ class Trainer:
         self.model.load_state_dict(state['model'])
         self.model.to(self.device)
         self.optimizer.load_state_dict(state['optimizer'])
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.load_state_dict(state['lr_scheduler'])
-            self.epoch = state['epoch']
-            train_loss = state['train_loss']
-            val_loss = state['val_loss']
-            print("Loaded weights at {:s}".format(state_path))
-            print("Epoch [{}]: TRAIN Loss: {:.4f}".format(self.epoch, train_loss))
-            print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
-            self.last_saved_val_loss = val_loss
+        self.lr_scheduler.load_state_dict(state['lr_scheduler'])
+        self.epoch = state['epoch']
+        train_loss = state['train_loss']
+        val_loss = state['val_loss']
+        print("Loaded weights at {:s}".format(state_path))
+        print("Epoch [{}]: TRAIN Loss: {:.4f}".format(self.epoch, train_loss))
+        print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
+        self.last_saved_val_loss = val_loss
 
     def save_state(self, train_loss, val_loss):
         """Save the state dict of the current training to disk
@@ -133,8 +152,11 @@ class Trainer:
                  )
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
-        model_fname = '{:s}_{:s}.mdl'.format(self.nll_type, time_stamp)
+        model_fname = '{:s}_{:s}_{:s}.mdl'.format(self.nll_type,
+                                                  self.model_name,
+                                                  time_stamp)
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
+        print(self.model_path)
         torch.save(state, self.model_path)
 
     def configure_optim(self,
@@ -174,6 +196,11 @@ class Trainer:
                                     epoch_i)
             self.eval_posterior(epoch_i, **sample_kwargs)
             self.epoch = epoch_i
+            # Stop early if val loss doesn't decrease for 5 consecutive epochs
+            self.early_stop_crit.append(val_loss_i)
+            self.early_stop_crit = self.early_stop_crit[-5:]
+            if ~is_decreasing(self.early_stop_crit) and (epoch_i > 30):
+                break
             if val_loss_i < self.last_saved_val_loss:
                 os.remove(self.model_path) if os.path.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
@@ -210,7 +237,8 @@ class Trainer:
                     out = self.model(batch)
                     # Get pred samples
                     self.nll_obj.set_trained_pred(out)
-                    self.logger.add_histogram('w2', self.nll_obj.w2, epoch_i)
+                    if 'Double' in self.nll_type:
+                        self.logger.add_histogram('w2', self.nll_obj.w2, epoch_i)
                     mc_samples = self.nll_obj.sample(Y_mean,
                                                      Y_std,
                                                      n_samples,
@@ -226,19 +254,27 @@ class Trainer:
                                                         -1])
         mean_pred = np.mean(samples, axis=-1)  # [batch_size, Y_dim]
         std_pred = np.std(samples, axis=-1)
-        self.logger.add_histogram('absolute precision',
-                                  np.abs(std_pred),
-                                  epoch_i)
-        self.logger.add_histogram('absolute error',
-                                  np.abs((mean_pred - y_val)),
-                                  epoch_i)
-        self.logger.add_histogram('z',
-                                  (mean_pred - y_val)/(std_pred + 1.e-7),
-                                  epoch_i)
+        prec = np.abs(std_pred)
+        err = np.abs((mean_pred - y_val))
+        z = ((mean_pred - y_val)/(std_pred + 1.e-7))
+        for i, name in self.Y_def.items():
+            self.logger.add_scalars('metrics/{:s}'.format(name),
+                                    dict(med_ae=np.median(err, axis=0)[i],
+                                         med_prec=np.median(prec, axis=0)[i]),
+                                    epoch_i)
+            self.logger.add_histogram('absolute precision/{:s}'.format(name),
+                                      prec[:, i],
+                                      epoch_i)
+            self.logger.add_histogram('absolute error/{:s}'.format(name),
+                                      err[:, i],
+                                      epoch_i)
+            self.logger.add_histogram('z/{:s}'.format(name),
+                                      z[:, i],
+                                      epoch_i)
 
     def __repr__(self):
-        keys = ['X_dim', 'features', 'Y_dim', 'out_dim', 'batch_size']
-        keys += ['epoch', 'n_epochs']
+        keys = ['X_dim', 'features', 'sub_features', 'Y_dim', 'out_dim']
+        keys += ['batch_size', 'epoch', 'n_epochs']
         vals = [getattr(self, k) for k in keys if hasattr(self, k)]
         metadata = dict(zip(keys, vals))
         if hasattr(self, 'model_kwargs'):
