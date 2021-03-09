@@ -14,25 +14,25 @@ if __name__ == '__main__':
     sub_features = ['ra_true', 'dec_true']
     sub_features += ['size_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'i']
-    trainer = Trainer('cuda', checkpoint_dir='run_gatnet', seed=1234)
+    trainer = Trainer('cuda', checkpoint_dir='test_run', seed=1234)
     trainer.load_dataset(features,
                          raytracing_out_dir='cosmodc2_raytracing_10450',
                          healpix=10450,
-                         n_data=50000,
+                         n_data=100,
                          is_train=True,
                          batch_size=50,
                          aperture_size=1.0,
-                         sub_features=features,
+                         sub_features=sub_features,
                          stop_mean_std_early=True)
     # FIXME: must be run after train
     trainer.load_dataset(features,
                          raytracing_out_dir='cosmodc2_raytracing_9559',
                          healpix=9559,
-                         n_data=1000,
+                         n_data=100,
                          is_train=False,
                          batch_size=50,  # FIXME: must be same as train
                          aperture_size=1.0,
-                         sub_features=features)
+                         sub_features=sub_features)
     trainer.configure_loss_fn('FullRankGaussianNLL')
     if True:
         trainer.configure_model('GATNet',

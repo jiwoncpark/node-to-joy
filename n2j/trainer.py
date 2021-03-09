@@ -22,6 +22,13 @@ def get_idx(orig_list, sub_list):
     return idx
 
 
+def is_decreasing(arr):
+    """Returns True if array is strictly monotonically decreasing
+
+    """
+    return np.all(np.diff(arr) < 0.0)
+
+
 class Trainer:
     Y_def = {0: 'k', 1: 'g1', 2: 'g2'}
 
@@ -34,6 +41,7 @@ class Trainer:
             os.mkdir(self.checkpoint_dir)
         self.logger = SummaryWriter(os.path.join(self.checkpoint_dir, 'runs'))
         self.epoch = 0
+        self.early_stop_crit = []
         self.last_saved_val_loss = np.inf
         self.model_path = 'dummy_path_name'
 
@@ -101,6 +109,7 @@ class Trainer:
         self.out_dim = nll_obj.out_dim
 
     def configure_model(self, model_name, model_kwargs={}):
+        self.model_name = model_name
         self.model_kwargs = model_kwargs
         self.model = getattr(gnn, model_name)(in_channels=self.X_dim,
                                               out_channels=self.out_dim,
@@ -120,15 +129,14 @@ class Trainer:
         self.model.load_state_dict(state['model'])
         self.model.to(self.device)
         self.optimizer.load_state_dict(state['optimizer'])
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.load_state_dict(state['lr_scheduler'])
-            self.epoch = state['epoch']
-            train_loss = state['train_loss']
-            val_loss = state['val_loss']
-            print("Loaded weights at {:s}".format(state_path))
-            print("Epoch [{}]: TRAIN Loss: {:.4f}".format(self.epoch, train_loss))
-            print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
-            self.last_saved_val_loss = val_loss
+        self.lr_scheduler.load_state_dict(state['lr_scheduler'])
+        self.epoch = state['epoch']
+        train_loss = state['train_loss']
+        val_loss = state['val_loss']
+        print("Loaded weights at {:s}".format(state_path))
+        print("Epoch [{}]: TRAIN Loss: {:.4f}".format(self.epoch, train_loss))
+        print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
+        self.last_saved_val_loss = val_loss
 
     def save_state(self, train_loss, val_loss):
         """Save the state dict of the current training to disk
@@ -151,8 +159,11 @@ class Trainer:
                  )
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
-        model_fname = '{:s}_{:s}.mdl'.format(self.nll_type, time_stamp)
+        model_fname = '{:s}_{:s}_{:s}.mdl'.format(self.nll_type,
+                                                  self.model_name,
+                                                  time_stamp)
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
+        print(self.model_path)
         torch.save(state, self.model_path)
 
     def configure_optim(self,
@@ -192,6 +203,11 @@ class Trainer:
                                     epoch_i)
             self.eval_posterior(epoch_i, **sample_kwargs)
             self.epoch = epoch_i
+            # Stop early if val loss doesn't decrease for 5 consecutive epochs
+            self.early_stop_crit.append(val_loss_i)
+            self.early_stop_crit = self.early_stop_crit[-5:]
+            if ~is_decreasing(self.early_stop_crit) and (epoch_i > 30):
+                break
             if val_loss_i < self.last_saved_val_loss:
                 os.remove(self.model_path) if os.path.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
@@ -249,7 +265,7 @@ class Trainer:
         err = np.abs((mean_pred - y_val))
         z = ((mean_pred - y_val)/(std_pred + 1.e-7))
         for i, name in self.Y_def.items():
-            self.logger.add_scalars('metrics/{:s}.format(name)',
+            self.logger.add_scalars('metrics/{:s}'.format(name),
                                     dict(med_ae=np.median(err, axis=0)[i],
                                          med_prec=np.median(prec, axis=0)[i]),
                                     epoch_i)
