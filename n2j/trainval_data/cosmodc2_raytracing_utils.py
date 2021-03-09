@@ -159,6 +159,7 @@ def raytrace_single_sightline(idx, iterator, ra_los, dec_los, z_src, fov,
     else:
         halos = get_los_halos(iterator, ra_los, dec_los, z_src,
                               fov, mass_cut, halo_filename)
+        halos = halos[halos['z'] + 1.e-7 < z_src]
     n_halos = halos.shape[0]
     # Instantiate multi-plane lens model
     lens_model = LensModel(lens_model_list=['NFW']*n_halos,
