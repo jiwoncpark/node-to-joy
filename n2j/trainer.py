@@ -56,19 +56,13 @@ class Trainer:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def load_dataset(self, features, raytracing_out_dir, healpix, n_data,
-                     is_train, batch_size, aperture_size,
-                     stop_mean_std_early=False, sub_features=None):
+    def load_dataset(self, data_kwargs, is_train, batch_size,
+                     sub_features=None):
         self.batch_size = batch_size
-        self.X_dim = len(features) if sub_features is None else len(sub_features)
+        features = data_kwargs['features']
+        self.X_dim = len(features) if sub_features is None else sub_features
         self.Y_dim = 3
-        dataset = CosmoDC2Graph(healpix=healpix,
-                                raytracing_out_dir=raytracing_out_dir,
-                                aperture_size=aperture_size,
-                                n_data=n_data,
-                                features=features,
-                                stop_mean_std_early=stop_mean_std_early,
-                                )
+        dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
             stats = self.train_dataset.data_stats
@@ -78,7 +72,6 @@ class Trainer:
                 norming = Standardizer(stats['X_mean'][:, idx],
                                        stats['X_std'][:, idx])
                 self.transform_X = transforms.Compose([slicing, norming])
-
             else:
                 self.transform_X = Standardizer(stats['X_mean'],
                                                 stats['X_std'])
