@@ -28,7 +28,7 @@ if __name__ == '__main__':
         train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_{:d}'.format(healpix),
                                               fov=0.85,
                                               healpix=healpix,
-                                              n_sightlines=2000,  # many more LOS
+                                              n_sightlines=50000,  # many more LOS
                                               mass_cut=11.0,
                                               n_kappa_samples=0)  # no sampling
         train_Y_generator.parallel_raytrace()

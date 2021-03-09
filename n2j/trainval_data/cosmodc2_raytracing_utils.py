@@ -104,7 +104,7 @@ def get_los_halos(iterator, ra_los, dec_los, z_src, fov, mass_cut, out_path):
     for df in iterator:
         # Get galaxies in the aperture and in foreground of source
         # Discard smaller masses, since they won't have a big impact anyway
-        lower_z = df['redshift_true'].values < z_src
+        lower_z = df['redshift_true'].values + 1.e-7 < z_src
         if lower_z.any():  # there are still some lower-z halos
             pass
         else:  # z started getting too high, no need to continue
