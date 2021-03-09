@@ -60,7 +60,7 @@ class Trainer:
                      sub_features=None):
         self.batch_size = batch_size
         features = data_kwargs['features']
-        self.X_dim = len(features) if sub_features is None else sub_features
+        self.X_dim = len(features) if sub_features is None else len(sub_features)
         self.Y_dim = 3
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
@@ -156,7 +156,6 @@ class Trainer:
                                                   self.model_name,
                                                   time_stamp)
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
-        print(self.model_path)
         torch.save(state, self.model_path)
 
     def configure_optim(self,
