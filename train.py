@@ -1,10 +1,20 @@
 """Script to train the Bayesian GNN
 
 """
+from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
-
 if __name__ == '__main__':
+    # Generate training labels for new healpix
+    train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_{:d}'.format(10327),
+                                          fov=0.85,
+                                          healpix=10327,
+                                          n_sightlines=50000,  # many more LOS
+                                          mass_cut=11.0,
+                                          n_kappa_samples=0)  # no sampling
+    train_Y_generator.parallel_raytrace()
+    train_Y_generator.apply_calibration()
+
     # Features to compile
     features = ['ra_true', 'dec_true']
     features += ['ellipticity_1_true', 'ellipticity_2_true']
