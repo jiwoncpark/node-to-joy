@@ -1,10 +1,20 @@
 """Script to train the Bayesian GNN
 
 """
+from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
-
 if __name__ == '__main__':
+    # Generate training labels for new healpix
+    train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_{:d}'.format(10327),
+                                          fov=0.85,
+                                          healpix=10327,
+                                          n_sightlines=50000,  # many more LOS
+                                          mass_cut=11.0,
+                                          n_kappa_samples=0)  # no sampling
+    train_Y_generator.parallel_raytrace()
+    train_Y_generator.apply_calibration()
+
     # Features to compile
     features = ['ra_true', 'dec_true']
     features += ['ellipticity_1_true', 'ellipticity_2_true']
@@ -20,12 +30,12 @@ if __name__ == '__main__':
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=raytracing_out_dirs,
                               healpixes=healpixes,
-                              n_data=[100, 100],
+                              n_data=[50000, 50000],
                               aperture_size=1.0,
                               stop_mean_std_early=True),
                          sub_features=sub_features,
                          is_train=True,
-                         batch_size=50
+                         batch_size=100,
                          )
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
@@ -35,15 +45,15 @@ if __name__ == '__main__':
                               aperture_size=1.0),
                          sub_features=sub_features,
                          is_train=False,
-                         batch_size=50,  # FIXME: must be same as train
+                         batch_size=100,  # FIXME: must be same as train
                          )
     trainer.configure_loss_fn('FullRankGaussianNLL')
     if True:
         trainer.configure_model('GATNet',
-                                {'hidden_channels': 128,
+                                {'hidden_channels': 256,
                                  'n_layers': 3,
                                  'dropout': 0.0,
-                                 'kwargs': {'concat': False, 'heads': 2}})
+                                 'kwargs': {'concat': False, 'heads': 4}})
     trainer.configure_optim({'lr': 1.e-4, 'weight_decay': 1.e-5},
                             {'factor': 0.5, 'min_lr': 1.e-7, 'patience': 10})
     if False:
