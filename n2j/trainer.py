@@ -195,9 +195,9 @@ class Trainer:
                                     epoch_i)
             self.eval_posterior(epoch_i, **sample_kwargs)
             self.epoch = epoch_i
-            # Stop early if val loss doesn't decrease for 5 consecutive epochs
+            # Stop early if val loss doesn't decrease for 10 consecutive epochs
             self.early_stop_crit.append(val_loss_i)
-            self.early_stop_crit = self.early_stop_crit[-5:]
+            self.early_stop_crit = self.early_stop_crit[-10:]
             if ~is_decreasing(self.early_stop_crit) and (epoch_i > 30):
                 break
             if val_loss_i < self.last_saved_val_loss:
