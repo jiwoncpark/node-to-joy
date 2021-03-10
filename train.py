@@ -1,42 +1,37 @@
 """Script to train the Bayesian GNN
 
 """
+import sys
 from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
 if __name__ == '__main__':
-    # Generate training labels for new healpix
-    train_Y_generator = CosmoDC2Raytracer(out_dir='cosmodc2_raytracing_{:d}'.format(10327),
-                                          fov=0.85,
-                                          healpix=10327,
-                                          n_sightlines=50000,  # many more LOS
-                                          mass_cut=11.0,
-                                          n_kappa_samples=0)  # no sampling
-    train_Y_generator.parallel_raytrace()
-    train_Y_generator.apply_calibration()
-
-    # Features to compile
-    features = ['ra_true', 'dec_true']
+    features = ['ra', 'dec', 'galaxy_id', 'redshift']
+    features += ['ra_true', 'dec_true', 'redshift_true']
     features += ['ellipticity_1_true', 'ellipticity_2_true']
-    features += ['size_true']
+    features += ['bulge_to_total_ratio_i', 'ellipticity_1_bulge_true', 'ellipticity_1_disk_true',
+                 'ellipticity_2_bulge_true', 'ellipticity_2_disk_true', ]
+    features += ['shear1', 'shear2', 'convergence']
+    features += ['size_bulge_true', 'size_disk_true', 'size_true']
     features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
     # Features to train on
     sub_features = ['ra_true', 'dec_true']
     sub_features += ['size_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'i']
     trainer = Trainer('cuda', checkpoint_dir='test_run', seed=1234)
-    healpixes = [10450, 10327]
+    healpixes = [10450]
     raytracing_out_dirs = ['cosmodc2_raytracing_{:d}'.format(hp) for hp in healpixes]
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=raytracing_out_dirs,
                               healpixes=healpixes,
-                              n_data=[50000, 50000],
+                              n_data=[100],
                               aperture_size=1.0,
                               stop_mean_std_early=True),
                          sub_features=sub_features,
                          is_train=True,
                          batch_size=100,
                          )
+    sys.exit()
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=['cosmodc2_raytracing_9559'],

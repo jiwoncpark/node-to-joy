@@ -64,7 +64,7 @@ class BaseGraph(Dataset):
         """
         sightlines_path = os.path.join(self.raytracing_out_dir,
                                        'sightlines.csv')
-        cols = ['galaxy_id', 'ra', 'dec']
+        cols = ['galaxy_id', 'ra', 'dec', 'z']
         cols += ['final_kappa', 'final_gamma1', 'final_gamma2']
         self.sightlines = pd.read_csv(sightlines_path,
                                       usecols=cols,
