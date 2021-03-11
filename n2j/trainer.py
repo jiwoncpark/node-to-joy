@@ -23,10 +23,10 @@ def get_idx(orig_list, sub_list):
 
 
 def is_decreasing(arr):
-    """Returns True if array is strictly monotonically decreasing
+    """Returns True if array ever decreased
 
     """
-    return np.all(np.diff(arr) < 0.0)
+    return np.any(np.diff(arr) < 0.0)
 
 
 class Trainer:
@@ -44,6 +44,8 @@ class Trainer:
         self.early_stop_crit = []
         self.last_saved_val_loss = np.inf
         self.model_path = 'dummy_path_name'
+        # Any non-weight variables of the model to log
+        self.model_log = {}
 
     def seed_everything(self):
         """Seed the training and sampling for reproducibility
@@ -158,12 +160,13 @@ class Trainer:
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
         torch.save(state, self.model_path)
 
-    def configure_optim(self,
+    def configure_optim(self, early_stop_memory,
                         optim_kwargs={},
                         lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7}):
         """Configure optimization-related objects
 
         """
+        self.early_stop_memory = early_stop_memory
         self.optim_kwargs = optim_kwargs
         self.lr_scheduler_kwargs = lr_scheduler_kwargs
         self.optimizer = optim.Adam(self.model.parameters(), **self.optim_kwargs)
@@ -197,13 +200,16 @@ class Trainer:
             self.epoch = epoch_i
             # Stop early if val loss doesn't decrease for 10 consecutive epochs
             self.early_stop_crit.append(val_loss_i)
-            self.early_stop_crit = self.early_stop_crit[-10:]
-            if ~is_decreasing(self.early_stop_crit) and (epoch_i > 30):
+            self.early_stop_crit = self.early_stop_crit[-self.early_stop_memory:]
+            memory_filled = len(self.early_stop_crit) == self.early_stop_memory
+            if ~is_decreasing(self.early_stop_crit) and memory_filled:
                 break
             if val_loss_i < self.last_saved_val_loss:
                 os.remove(self.model_path) if os.path.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
                 self.last_saved_val_loss = val_loss_i
+                if self.model.name == 'GATNet':
+                    self.model_log['attention'] = self.model.alpha
         self.logger.close()
 
     def infer(self):
@@ -245,6 +251,7 @@ class Trainer:
                     samples[:, mc_iter, :, :] = mc_samples
                 break  # only process the first batch
         self.log_metrics(epoch_i, samples, y_val)
+        return samples, y_val
 
     def log_metrics(self, epoch_i, samples, y_val):
         # Log metrics on pred

@@ -86,6 +86,7 @@ class GATNet(nn.Module):
                                   dropout=self.dropout,
                                   add_self_loops=False,
                                   **self.kwargs))
+        self.alpha = None  # init, [edge_index, attention_weights]
         # self.fc = nn.Linear(self.hidden_channels, out_channels)
 
     def forward(self, data):
@@ -94,7 +95,8 @@ class GATNet(nn.Module):
             x = self.convs[i](x, edge_index)
             x = F.leaky_relu(x)
             x = F.dropout(x, p=self.dropout, training=True)
-        x = self.convs[-1](x, edge_index)
+        x, alpha = self.convs[-1](x, edge_index, return_attention_weights=True)
+        self.alpha = alpha
         zero_idx_mask = get_zero_nodes(batch)
         x = x[zero_idx_mask, :]
         return x
