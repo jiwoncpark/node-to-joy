@@ -223,7 +223,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         # Init with central galaxy containing masked-out features
         nodes = pd.DataFrame(self.get_los_node())
         gals_iter = self.get_gals_iterator(self.healpix,
-                                           self.features + ['galaxy_id'])
+                                           self.features)
         for gals_df in gals_iter:
             # Query neighboring galaxies within 3' to sightline
             dist, ra_diff, dec_diff = cu.get_distance(gals_df['ra_true'],
