@@ -1,9 +1,9 @@
-"""Script to train the Bayesian GNN
+"""Inference script
 
 """
-import sys
-from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
+import numpy as np
 from n2j.trainer import Trainer
+
 
 if __name__ == '__main__':
     features = ['ra', 'dec', 'galaxy_id', 'redshift']
@@ -49,9 +49,9 @@ if __name__ == '__main__':
                                  'dropout': 0.0,
                                  'kwargs': {'concat': False, 'heads': 4}})
     trainer.configure_optim(20,
-                            {'lr': 1.e-3, 'weight_decay': 1.e-5},
-                            {'factor': 0.5, 'min_lr': 1.e-7, 'patience': 20, 'verbose': True})
-    if False:
-        trainer.load_state('/home/jwp/stage/sl/n2j/test_run/DoubleGaussianNLL_epoch=0_03-05-2021_23:41.mdl')
-    trainer.train(n_epochs=500)
+                            {'lr': 1.e-4, 'weight_decay': 1.e-5},
+                            {'factor': 0.5, 'min_lr': 1.e-7, 'patience': 10})
+    trainer.load_state('/home/jwp/stage/sl/n2j/test_run/FullRankGaussianNLL_GATNet_epoch=46_03-11-2021_07:43.mdl')
+    summary = trainer.eval_posterior(0, n_samples=200, n_mc_dropout=20)
+    np.save('alpha.npy', summary)
     print(trainer)

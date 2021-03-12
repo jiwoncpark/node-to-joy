@@ -175,6 +175,7 @@ class Trainer:
                                                                  **self.lr_scheduler_kwargs)
 
     def train_single_epoch(self):
+        self.model.train()
         train_loss = 0.0
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
@@ -208,8 +209,6 @@ class Trainer:
                 os.remove(self.model_path) if os.path.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
                 self.last_saved_val_loss = val_loss_i
-                if self.model.name == 'GATNet':
-                    self.model_log['attention'] = self.model.alpha
         self.logger.close()
 
     def infer(self):
@@ -218,7 +217,7 @@ class Trainer:
         with torch.no_grad():
             for i, batch in enumerate(self.val_loader):
                 batch = batch.to(self.device)
-                out = self.model(batch)
+                out, _ = self.model(batch)
                 loss = self.nll_obj(out, batch.y)
                 val_loss += (loss.cpu().item() - val_loss)/(1.0+i)
         self.lr_scheduler.step(val_loss)
@@ -239,7 +238,7 @@ class Trainer:
                 # Get ground truth
                 y_val = (batch.y*Y_std + Y_mean).cpu().numpy()
                 for mc_iter in range(n_mc_dropout):
-                    out = self.model(batch)
+                    out, (edge_index, w) = self.model(batch)
                     # Get pred samples
                     self.nll_obj.set_trained_pred(out)
                     if 'Double' in self.nll_type:
@@ -251,7 +250,13 @@ class Trainer:
                     samples[:, mc_iter, :, :] = mc_samples
                 break  # only process the first batch
         self.log_metrics(epoch_i, samples, y_val)
-        return samples, y_val
+        summary = dict(samples=samples,
+                       y_val=y_val,
+                       batch=batch.batch.cpu().numpy(),
+                       edge_index=edge_index.cpu().numpy(),
+                       w=w.cpu().numpy()
+                       )
+        return summary
 
     def log_metrics(self, epoch_i, samples, y_val):
         # Log metrics on pred

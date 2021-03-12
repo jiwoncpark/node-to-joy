@@ -86,20 +86,24 @@ class GATNet(nn.Module):
                                   dropout=self.dropout,
                                   add_self_loops=False,
                                   **self.kwargs))
-        self.alpha = None  # init, [edge_index, attention_weights]
         # self.fc = nn.Linear(self.hidden_channels, out_channels)
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
+        zero_idx_mask = get_zero_nodes(batch)
         for i in range(self.n_layers-1):
             x = self.convs[i](x, edge_index)
             x = F.leaky_relu(x)
             x = F.dropout(x, p=self.dropout, training=True)
-        x, alpha = self.convs[-1](x, edge_index, return_attention_weights=True)
-        self.alpha = alpha
-        zero_idx_mask = get_zero_nodes(batch)
-        x = x[zero_idx_mask, :]
-        return x
+        if self.training:
+            x = self.convs[-1](x, edge_index)
+            x = x[zero_idx_mask, :]
+            return x
+        else:
+            x, (edge_index, w) = self.convs[-1](x, edge_index,
+                                                return_attention_weights=True)
+            x = x[zero_idx_mask, :]
+            return x, (edge_index, w)
 
 
 class SageNet(nn.Module):
