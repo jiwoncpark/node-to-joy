@@ -24,7 +24,7 @@ if __name__ == '__main__':
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=raytracing_out_dirs,
                               healpixes=healpixes,
-                              n_data=[100, 100],
+                              n_data=[10000, 10000],
                               aperture_size=1.0,
                               stop_mean_std_early=True),
                          sub_features=sub_features,

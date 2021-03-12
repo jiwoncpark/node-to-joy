@@ -6,7 +6,7 @@ from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
 if __name__ == '__main__':
-    features = ['ra', 'dec', 'galaxy_id', 'redshift']
+    features = ['galaxy_id', 'ra', 'dec', 'galaxy_id', 'redshift']
     features += ['ra_true', 'dec_true', 'redshift_true']
     features += ['ellipticity_1_true', 'ellipticity_2_true']
     features += ['bulge_to_total_ratio_i', 'ellipticity_1_bulge_true', 'ellipticity_1_disk_true',
