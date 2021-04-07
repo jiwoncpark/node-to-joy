@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from n2j.trainval_data import raytracing_utils as ru
+import n2j.trainval_data.utils.raytracing_utils as ru
 
 __all__ = ['BaseRaytracer']
 
@@ -17,6 +17,7 @@ class BaseRaytracer(ABC):
     """
 
     def __init__(self,
+                 in_dir: str = '.',
                  out_dir: str = '.',
                  debug: bool = False,):
         """
@@ -28,6 +29,7 @@ class BaseRaytracer(ABC):
             test mode
 
         """
+        self.in_dir = in_dir
         self.out_dir = out_dir
         if not os.path.exists(self.out_dir):
             os.mkdir(self.out_dir)
@@ -41,17 +43,20 @@ class BaseRaytracer(ABC):
         """Define output file paths and path formats
 
         """
-        self.sightlines_path = os.path.join(self.out_dir, 'sightlines.csv')
+        self.sightlines_path = os.path.join(self.out_dir, 'sightlines.npy')
+        self.Y_path = os.path.join(self.out_dir, 'Y.csv')
         self.halo_path_fmt = os.path.join(self.out_dir,
-                                          'los_halos_los={:d}.csv')
+                                          'halos_los={0:07d}_id={1:012d}.npy')
         self.k_map_fmt = os.path.join(self.out_dir,
-                                      'k_map_los={:d}.npy')
+                                      'k_map_los={0:07d}.npy')
         self.g1_map_fmt = os.path.join(self.out_dir,
-                                       'g1_{:d}_map_los={:d}.npy')
+                                       'g1_map_los={0:07d}.npy')
         self.g2_map_fmt = os.path.join(self.out_dir,
-                                       'g2_{:d}_map_los={:d}.npy')
+                                       'g2_map_los={0:07d}.npy')
         self.k_samples_fmt = os.path.join(self.out_dir,
-                                          'k_samples_los={:d}.npy')
+                                          'k_samples_los={0:07d}.npy')
+        self.k_samples_map_fmt = os.path.join(self.out_dir,
+                                              'k_map_los={0:07d}_sample={1:04d}.npy')
         self.uncalib_path = os.path.join(self.out_dir, 'uncalib.csv')
         # out_dir of a separate run that had n_kappa_samples > 0
         # that can be used to estimate the mapping between weighted sum of halo
@@ -71,18 +76,23 @@ class BaseRaytracer(ABC):
         parameterized halos
 
         """
-        sightlines = pd.read_csv(self.sightlines_path, index_col=None)
+        Y = pd.DataFrame(np.load(self.sightlines_path),
+                         columns=self.pointings_cols)  # init with pointings df
         uncalib = pd.read_csv(self.uncalib_path,
-                              index_col=None).drop_duplicates('idx')
+                              index_col=None,
+                              ).drop_duplicates('idx').sort_values(by=['idx'])
         mean_kappas = self.get_mean_kappas()
         # To the WL quantities, add our raytracing and subtract mean mass
-        sightlines['final_kappa'] = uncalib['kappa'] + sightlines['kappa'] - mean_kappas
-        sightlines['final_gamma1'] = uncalib['gamma1'] + sightlines['gamma1']
-        sightlines['final_gamma2'] = uncalib['gamma2'] + sightlines['gamma2']
+        final_kappa = uncalib['kappa'].values + Y['kappa'].values - mean_kappas
+        final_gamma1 = uncalib['gamma1'].values + Y['gamma1'].values
+        final_gamma2 = uncalib['gamma2'].values + Y['gamma2'].values
         # Also log the mean kappa contribution of halos, for fitting later
-        sightlines['mean_kappa'] = mean_kappas
-        # Update the sightlines df
-        sightlines.to_csv(self.sightlines_path, index=None)
+        Y['mean_kappa'] = mean_kappas
+        Y['final_kappa'] = final_kappa
+        Y['final_gamma1'] = final_gamma1
+        Y['final_gamma2'] = final_gamma2
+        # Update the Y df
+        Y[self.Y_cols].to_csv(self.Y_path, index=None)
 
     def get_mean_kappas(self):
         """Get the mean kappa contribution of LOS halos
@@ -98,8 +108,9 @@ class BaseRaytracer(ABC):
         from explicit computation
 
         """
-        sightlines = pd.read_csv(self.sightlines_path, index_col=None)
-        n_sightlines = sightlines.shape[0]
+        pointings = pd.DataFrame(np.load(self.sightlines_path),
+                                 columns=self.pointings_cols)
+        n_sightlines = pointings.shape[0]
         mean_kappas = np.empty(n_sightlines)
         # Compute mean kappa of halos in each sightline
         for los_i in range(n_sightlines):
@@ -113,30 +124,36 @@ class BaseRaytracer(ABC):
         another run
 
         """
-        #import matplotlib.pyplot as plt
         if not os.path.exists(self.kappa_sampling_dir):
             raise OSError("If kappas were not sampled for each sightline,"
                           " you must generate some pairs of weighted sum of"
                           " masses and mean of kappas, in a run with out_dir"
                           " named 'kappa_sampling'.")
         # Fit a model using the kappa_sampling run as the training data
-        train_uncalib_path = os.path.join(self.kappa_sampling_dir,
-                                          'uncalib.csv')
-        train_sightlines_path = os.path.join(self.kappa_sampling_dir,
-                                             'sightlines.csv')
-        train_uncalib = pd.read_csv(train_uncalib_path,
-                                    index_col=None).drop_duplicates('idx')
-        train_sightlines = pd.read_csv(train_sightlines_path, index_col=None)
-        X_train = train_uncalib['weighted_mass_sum'].values
-        Y_train = train_sightlines['mean_kappa'].values
-        fit_model = ru.fit_gp(X_train.reshape(-1, 1), Y_train)
+        uncalib_train_path = os.path.join(self.kappa_sampling_dir, 'uncalib.csv')
+        X_train = pd.read_csv(uncalib_train_path,
+                              usecols=['idx', 'weighted_mass_sum'],
+                              index_col=None,
+                              ).drop_duplicates('idx').sort_values(by=['idx'])
+        X_train = X_train['weighted_mass_sum'].values.reshape(-1, 1)
+        Y_train_path = os.path.join(self.kappa_sampling_dir, 'Y.csv')
+        Y_train = pd.read_csv(Y_train_path,
+                              usecols=['mean_kappa'],
+                              index_col=None,
+                              ).values
+        fit_model = ru.fit_gp(X_train, Y_train)
         # Predict on this run
-        test_uncalib = pd.read_csv(self.uncalib_path,
-                                   index_col=None).drop_duplicates('idx')
-        X_test = test_uncalib['weighted_mass_sum'].values
-        mean_kappas = ru.approx_mean_kappa(fit_model, X_test.reshape(-1, 1))
-        #plt.scatter(X_train, Y_train, color='b', label='train')
-        #plt.scatter(X_test, mean_kappas, color='r', label='test')
-        #plt.legend()
-        #plt.show()
+        X_test = pd.read_csv(self.uncalib_path,
+                             usecols=['idx', 'weighted_mass_sum'],
+                             index_col=None,
+                             ).drop_duplicates('idx').sort_values(by=['idx'])
+        X_test = X_test['weighted_mass_sum'].values.reshape(-1, 1)
+        mean_kappas = ru.approx_mean_kappa(fit_model, X_test, seed=self.seed)
+        if self.debug:
+            import matplotlib.pyplot as plt
+            plt.scatter(X_train, Y_train, color='b', label='train')
+            plt.scatter(X_test, mean_kappas, color='r', label='test')
+            plt.legend()
+            plt.show()
+            plt.savefig('mean_kappa_interp_hp={:d}.png'.format(self.healpix))
         return mean_kappas

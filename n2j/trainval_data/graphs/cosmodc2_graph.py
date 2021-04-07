@@ -14,8 +14,7 @@ import torch
 from torch.utils.data.dataset import ConcatDataset
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
-from n2j import data
-from n2j.trainval_data import coord_utils as cu
+from n2j.trainval_data.utils import coord_utils as cu
 
 
 class CosmoDC2Graph(ConcatDataset):
@@ -23,17 +22,18 @@ class CosmoDC2Graph(ConcatDataset):
     with an added data transformation functionality
 
     """
-    def __init__(self, healpixes, raytracing_out_dirs, aperture_size,
+    def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
                  n_data, features, stop_mean_std_early=False):
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
         datasets = []
         for i in range(self.n_datasets):
             graph_hp = CosmoDC2GraphHealpix(healpixes[i],
+                                            in_dir,
                                             raytracing_out_dirs[i],
                                             aperture_size,
                                             n_data[i],
-                                            features
+                                            features,
                                             )
             datasets.append(graph_hp)
         ConcatDataset.__init__(self, datasets)
@@ -53,7 +53,7 @@ class CosmoDC2Graph(ConcatDataset):
                                   batch_size=100,
                                   shuffle=False,
                                   num_workers=4,
-                                  drop_last=True)
+                                  drop_last=False)
         for i, b in enumerate(dummy_loader):
             X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
             X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
@@ -98,18 +98,17 @@ class CosmoDC2GraphHealpix(BaseGraph):
     columns += ['size_bulge_true', 'size_disk_true', 'size_true']
     columns += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
 
-    def __init__(self, healpix, raytracing_out_dir, aperture_size, n_data,
-                 features,
-                 debug=False, root=None):
+    def __init__(self, healpix, in_dir, raytracing_out_dir,
+                 aperture_size, n_data, features,
+                 debug=False,):
+        self.in_dir = in_dir if in_dir else '/global/cscratch1/sd/jwp/n2j'
         self.healpix = healpix
         self.features = features
         self.closeness = 0.5/60.0  # deg, edge criterion between neighbors
         self.mag_lower = 18.5  # lower magnitude cut, excludes stars
         # LSST gold sample i-band mag (Gorecki et al 2014)
         self.mag_upper = 25.3  # upper magnitude cut, excludes small halos
-        if root is None:
-            root = os.path.join(data.__path__[0],
-                                'cosmodc2_{:d}'.format(healpix))
+        root = os.path.join(self.in_dir, 'cosmodc2_{:d}'.format(healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
 
@@ -122,14 +121,10 @@ class CosmoDC2GraphHealpix(BaseGraph):
         if self.debug:
             return 'debug_gals.csv'
         else:
-            return 'cosmodc2_gals_{:d}.csv'.format(self.healpix)
+            return 'gals_{:d}.csv'.format(self.healpix)
 
     @property
     def raw_file_names(self):
-        """A list of files relative to self.raw_dir which needs to be found in
-        order to skip the download
-
-        """
         return [self.raw_file_name]
 
     @property
@@ -219,7 +214,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         """
         if os.path.exists(self.processed_file_path_fmt.format(i)):
             return None
-        los_info = self.sightlines.iloc[i]
+        los_info = self.Y.iloc[i]
         # Init with central galaxy containing masked-out features
         nodes = pd.DataFrame(self.get_los_node())
         gals_iter = self.get_gals_iterator(self.healpix,

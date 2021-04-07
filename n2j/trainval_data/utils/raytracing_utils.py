@@ -6,7 +6,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 # from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 
-def approx_mean_kappa(fit_model, weighted_mass_sum):
+def approx_mean_kappa(fit_model, weighted_mass_sum, seed):
     """Approximate the mean kappa given the log weighted sum of halo masses
 
     Parameters
@@ -25,8 +25,9 @@ def approx_mean_kappa(fit_model, weighted_mass_sum):
         the simulated mean kappa, including spread, of the halos
 
     """
+    rng = np.random.default_rng(seed)
     pred, sigma = fit_model.predict(weighted_mass_sum, return_std=True)
-    mean_kappa = pred + np.random.randn(*sigma.shape)*sigma
+    mean_kappa = pred.reshape(-1) + rng.standard_normal(sigma.shape)*sigma
     return mean_kappa
 
 

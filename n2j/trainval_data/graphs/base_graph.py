@@ -44,7 +44,7 @@ class BaseGraph(Dataset):
             path to train or val directory containing `raw` and `processed`
             folders
         raytracing_out_dir : str
-            path to output directory of raytracer containing `sightlines.csv`
+            path to output directory of raytracer containing `Y.csv`
         aperture_size : float
             field of view around each sightline in arcmin
         debug : bool
@@ -62,13 +62,11 @@ class BaseGraph(Dataset):
         """Load the precomputed sightlines containing the pointings and labels
 
         """
-        sightlines_path = os.path.join(self.raytracing_out_dir,
-                                       'sightlines.csv')
-        cols = ['galaxy_id', 'ra', 'dec', 'z']
-        cols += ['final_kappa', 'final_gamma1', 'final_gamma2']
-        self.sightlines = pd.read_csv(sightlines_path,
-                                      usecols=cols,
-                                      index_col=None,
-                                      nrows=self.n_data)
+        Y_path = os.path.join(self.raytracing_out_dir, 'Y.csv')
+        cols = ['galaxy_id', 'final_kappa', 'final_gamma1', 'final_gamma2']
+        self.Y = pd.read_csv(Y_path,
+                             usecols=cols,
+                             index_col=None,
+                             nrows=self.n_data)
         # Convert deg to arcmin
-        # self.sightlines.loc[:, ['ra', 'dec']] *= 60.0
+        # self.Y.loc[:, ['ra', 'dec']] *= 60.0
