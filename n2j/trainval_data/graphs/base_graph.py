@@ -64,6 +64,7 @@ class BaseGraph(Dataset):
         """
         Y_path = os.path.join(self.raytracing_out_dir, 'Y.csv')
         cols = ['galaxy_id', 'final_kappa', 'final_gamma1', 'final_gamma2']
+        cols += ['ra', 'dec']
         self.Y = pd.read_csv(Y_path,
                              usecols=cols,
                              index_col=None,

@@ -30,7 +30,6 @@ def is_decreasing(arr):
 
 
 class Trainer:
-    Y_def = {0: 'k', 1: 'g1', 2: 'g2'}
 
     def __init__(self, device_type, checkpoint_dir='trained_models', seed=123):
         self.device = torch.device(device_type)
@@ -59,26 +58,38 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
-                     sub_features=None):
+                     sub_features=None, sub_target=None):
         self.batch_size = batch_size
         features = data_kwargs['features']
-        self.X_dim = len(features) if sub_features is None else len(sub_features)
-        self.Y_dim = 3
+        self.sub_features = sub_features if sub_features else features
+        self.X_dim = len(self.sub_features)
+        target = ['final_kappa', 'final_gamma1', 'final_gamma2']
+        self.sub_target = sub_target if sub_target else target
+        self.Y_dim = len(self.sub_target)
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
             stats = self.train_dataset.data_stats
-            if sub_features is not None:
+            if sub_features:
                 idx = get_idx(features, sub_features)
+                self.X_mean = stats['X_mean'][:, idx]
+                self.X_std = stats['X_std'][:, idx]
                 slicing = Slicer(idx)
-                norming = Standardizer(stats['X_mean'][:, idx],
-                                       stats['X_std'][:, idx])
+                norming = Standardizer(self.X_mean, self.X_std)
                 self.transform_X = transforms.Compose([slicing, norming])
             else:
-                self.transform_X = Standardizer(stats['X_mean'],
-                                                stats['X_std'])
-            self.transform_Y = Standardizer(stats['Y_mean'],
-                                            stats['Y_std'])
+                self.X_mean = stats['X_mean']
+                self.X_std = stats['X_std']
+                self.transform_X = Standardizer(self.X_mean, self.X_std)
+            if sub_target:
+                idx_Y = get_idx(target, sub_target)
+                self.Y_mean = stats['Y_mean'][:, idx_Y]
+                self.Y_std = stats['Y_std'][:, idx_Y]
+                slicing_Y = Slicer(idx_Y)
+                norming_Y = Standardizer(self.Y_mean, self.Y_std)
+                self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
+            else:
+                self.transform_Y = Standardizer(self.Y_mean, self.Y_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_loader = DataLoader(self.train_dataset,
@@ -225,8 +236,8 @@ class Trainer:
 
     def eval_posterior(self, epoch_i, n_samples=200, n_mc_dropout=20):
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
-        Y_mean = self.train_dataset.data_stats['Y_mean'].to(self.device)
-        Y_std = self.train_dataset.data_stats['Y_std'].to(self.device)
+        Y_mean = self.Y_mean.to(self.device)
+        Y_std = self.Y_std.to(self.device)
         self.model.eval()
         with torch.no_grad():
             samples = np.empty([self.batch_size,
@@ -268,7 +279,7 @@ class Trainer:
         prec = np.abs(std_pred)
         err = np.abs((mean_pred - y_val))
         z = ((mean_pred - y_val)/(std_pred + 1.e-7))
-        for i, name in self.Y_def.items():
+        for i, name in enumerate(self.sub_target):
             self.logger.add_scalars('metrics/{:s}'.format(name),
                                     dict(med_ae=np.median(err, axis=0)[i],
                                          med_prec=np.median(prec, axis=0)[i]),
@@ -284,7 +295,7 @@ class Trainer:
                                       epoch_i)
 
     def __repr__(self):
-        keys = ['X_dim', 'features', 'sub_features', 'Y_dim', 'out_dim']
+        keys = ['X_dim', 'sub_features', 'sub_target', 'Y_dim', 'out_dim']
         keys += ['batch_size', 'epoch', 'n_epochs']
         keys_vals = [(k, getattr(self, k)) for k in keys if hasattr(self, k)]
         metadata = dict(keys_vals)
