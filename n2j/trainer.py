@@ -12,7 +12,7 @@ from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.losses.nll as losses
 import n2j.models.gnn as gnn
-from n2j.trainval_data.trainval_data_utils import Standardizer, Slicer
+from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
 
 
 def get_idx(orig_list, sub_list):
@@ -252,9 +252,9 @@ class Trainer:
         self.log_metrics(epoch_i, samples, y_val)
         summary = dict(samples=samples,
                        y_val=y_val,
-                       batch=batch.batch.cpu().numpy(),
-                       edge_index=edge_index.cpu().numpy(),
-                       w=w.cpu().numpy()
+                       batch=batch.batch.detach().cpu().numpy(),
+                       edge_index=edge_index.detach().cpu().numpy(),
+                       w=w.detach().cpu().numpy()
                        )
         return summary
 
@@ -286,8 +286,8 @@ class Trainer:
     def __repr__(self):
         keys = ['X_dim', 'features', 'sub_features', 'Y_dim', 'out_dim']
         keys += ['batch_size', 'epoch', 'n_epochs']
-        vals = [getattr(self, k) for k in keys if hasattr(self, k)]
-        metadata = dict(zip(keys, vals))
+        keys_vals = [(k, getattr(self, k)) for k in keys if hasattr(self, k)]
+        metadata = dict(keys_vals)
         if hasattr(self, 'model_kwargs'):
             metadata.update(self.model_kwargs)
         if hasattr(self, 'optim_kwargs'):
