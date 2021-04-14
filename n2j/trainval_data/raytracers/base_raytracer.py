@@ -61,7 +61,6 @@ class BaseRaytracer(ABC):
         # out_dir of a separate run that had n_kappa_samples > 0
         # that can be used to estimate the mapping between weighted sum of halo
         # masses and mean of kappa samples.
-        self.kappa_sampling_dir = 'kappa_sampling'
 
     @abstractmethod
     def get_pointings_iterator(self):
@@ -124,11 +123,6 @@ class BaseRaytracer(ABC):
         another run
 
         """
-        if not os.path.exists(self.kappa_sampling_dir):
-            raise OSError("If kappas were not sampled for each sightline,"
-                          " you must generate some pairs of weighted sum of"
-                          " masses and mean of kappas, in a run with out_dir"
-                          " named 'kappa_sampling'.")
         # Fit a model using the kappa_sampling run as the training data
         uncalib_train_path = os.path.join(self.kappa_sampling_dir, 'uncalib.csv')
         X_train = pd.read_csv(uncalib_train_path,

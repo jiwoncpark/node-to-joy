@@ -28,9 +28,11 @@ class CosmoDC2Raytracer(BaseRaytracer):
     LENSING_NSIDE = 4096
     KAPPA_DIFF = 1.0  # arcsec
     COLUMN_NAMING = column_naming
+    TO_200C = 0.85  # multiply FOF (b=0.168) masses by this to get 200c masses
 
     def __init__(self, in_dir, out_dir, fov, n_kappa_samples, healpix,
-                 approx_z_src=2.0, mass_cut=11, n_sightlines=1000, debug=False):
+                 approx_z_src=2.0, mass_cut=11, n_sightlines=1000,
+                 kappa_sampling_dir=None, debug=False):
         """
         Parameters
         ----------
@@ -60,6 +62,16 @@ class CosmoDC2Raytracer(BaseRaytracer):
         self.n_sightlines = n_sightlines
         self.n_kappa_samples = n_kappa_samples
         self.healpix = healpix
+        if self.n_kappa_samples:  # kappa explicitly sampled
+            self.kappa_sampling_dir = None
+        else:  # kappa interpolated
+            if os.path.exists(kappa_sampling_dir):
+                self.kappa_sampling_dir = kappa_sampling_dir
+            else:
+                raise OSError("If kappas were not sampled for each sightline,"
+                              " you must generate some pairs of weighted sum of"
+                              " masses and mean of kappas and provide the"
+                              " out_dir of that run.")
         self.debug = debug
         self._set_column_names()
         self._get_pointings()

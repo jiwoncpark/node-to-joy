@@ -27,6 +27,7 @@ class CosmoDC2Graph(ConcatDataset):
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
         datasets = []
+        Y_list = []
         for i in range(self.n_datasets):
             graph_hp = CosmoDC2GraphHealpix(healpixes[i],
                                             in_dir,
@@ -36,6 +37,8 @@ class CosmoDC2Graph(ConcatDataset):
                                             features,
                                             )
             datasets.append(graph_hp)
+            Y_list.append(graph_hp.Y)
+        self.Y = pd.concat(Y_list, ignore_index=True).reset_index(drop=True)
         ConcatDataset.__init__(self, datasets)
         self.transform_X = None
         self.transform_Y = None
@@ -233,7 +236,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
                                       gals_df['mag_i_lsst'].values < self.mag_upper)
             keep = np.logical_and(dist_keep, mag_keep)
             nodes = nodes.append(gals_df.loc[keep, :], ignore_index=True)
-        x = torch.from_numpy(nodes.values).to(torch.float32)
+        x = torch.from_numpy(nodes[self.features].values).to(torch.float32)
         y = torch.FloatTensor([[los_info['final_kappa'],
                               los_info['final_gamma1'],
                               los_info['final_gamma2']]])
