@@ -230,7 +230,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
                 pass
             else:  # z started getting too high, no need to continue
                 continue
-            high_mass = df['halo_mass'].values > 10.0**self.mass_cut
+            high_mass = df['halo_mass'].values*self.TO_200C > 10.0**self.mass_cut
             cut = np.logical_and(high_mass, lower_z)
             df = df[cut].reset_index(drop=True)
             if len(df) > 0:
@@ -250,6 +250,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
         #####################
         # Define NFW kwargs #
         #####################
+        halos['halo_mass'] *= self.TO_200C
         Rs, alpha_Rs, eff = hu.get_nfw_kwargs(halos['halo_mass'].values,
                                               halos['stellar_mass'].values,
                                               halos['redshift_true'].values,
