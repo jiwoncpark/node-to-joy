@@ -224,8 +224,8 @@ class CosmoDC2GraphHealpix(BaseGraph):
                                            self.features)
         for gals_df in gals_iter:
             # Query neighboring galaxies within 3' to sightline
-            dist, ra_diff, dec_diff = cu.get_distance(gals_df['ra_true'],
-                                                      gals_df['dec_true'],
+            dist, ra_diff, dec_diff = cu.get_distance(gals_df['ra_true'].values,
+                                                      gals_df['dec_true'].values,
                                                       los_info['ra'],
                                                       los_info['dec'])
             gals_df['ra_true'] = ra_diff  # deg
