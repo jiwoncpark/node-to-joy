@@ -14,7 +14,7 @@ class Subgraph(Data):
     """Subgraph representing a single sightline
 
     """
-    def __init__(self, x, edge_index, y):
+    def __init__(self, x, y_local, y, edge_index=None):
         """
 
         Parameters
@@ -27,7 +27,8 @@ class Subgraph(Data):
             the label to infer
 
         """
-        Data.__init__(self, x=x, edge_index=edge_index, y=y)
+        Data.__init__(self, x=x, y=y, edge_index=edge_index)
+        self.y_local = y_local
 
 
 class BaseGraph(Dataset):

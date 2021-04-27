@@ -10,8 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
-import n2j.losses.nll as losses
-import n2j.models.gnn as gnn
+import n2j.losses as losses
+import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
 
 
@@ -70,6 +70,7 @@ class Trainer:
         if is_train:
             self.train_dataset = dataset
             stats = self.train_dataset.data_stats
+            # Transforming X
             if sub_features:
                 idx = get_idx(features, sub_features)
                 self.X_mean = stats['X_mean'][:, idx]
@@ -81,6 +82,7 @@ class Trainer:
                 self.X_mean = stats['X_mean']
                 self.X_std = stats['X_std']
                 self.transform_X = Standardizer(self.X_mean, self.X_std)
+            # Transforming global Y
             if sub_target:
                 idx_Y = get_idx(target, sub_target)
                 self.Y_mean = stats['Y_mean'][:, idx_Y]
@@ -90,8 +92,13 @@ class Trainer:
                 self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
             else:
                 self.transform_Y = Standardizer(self.Y_mean, self.Y_std)
+            # Transforming local Y
+            self.Y_local_mean = stats['Y_local_mean']
+            self.Y_local_std = stats['Y_local_std']
+            self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
+            self.train_dataset.transform_Y_local = self.transform_Y_local
             self.train_loader = DataLoader(self.train_dataset,
                                            batch_size=self.batch_size,
                                            shuffle=True,
@@ -101,6 +108,7 @@ class Trainer:
             self.val_dataset = dataset
             self.val_dataset.transform_X = self.transform_X
             self.val_dataset.transform_Y = self.transform_Y
+            self.val_dataset.transform_Y_local = self.transform_Y_local
             self.val_loader = DataLoader(self.val_dataset,
                                          batch_size=self.batch_size,
                                          shuffle=False,
@@ -108,18 +116,14 @@ class Trainer:
                                          drop_last=True)
 
     def configure_loss_fn(self, loss_type):
-        nll_obj = getattr(losses, loss_type)(Y_dim=self.Y_dim,
-                                             device=self.device)
-        self.nll_obj = nll_obj
-        self.nll_type = self.nll_obj.__class__.__name__
-        self.out_dim = nll_obj.out_dim
+        loss_obj = getattr(losses, loss_type)()
+        self.loss_obj = loss_obj
+        self.loss_type = self.loss_obj.__class__.__name__
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
         self.model_kwargs = model_kwargs
-        self.model = getattr(gnn, model_name)(in_channels=self.X_dim,
-                                              out_channels=self.out_dim,
-                                              **self.model_kwargs)
+        self.model = getattr(models, model_name)(**self.model_kwargs)
         self.model.to(self.device)
 
     def load_state(self, state_path):
@@ -165,7 +169,7 @@ class Trainer:
                  )
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
-        model_fname = '{:s}_{:s}_{:s}.mdl'.format(self.nll_type,
+        model_fname = '{:s}_{:s}_{:s}.mdl'.format(self.loss_type,
                                                   self.model_name,
                                                   time_stamp)
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
@@ -191,7 +195,7 @@ class Trainer:
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
             out = self.model(batch)
-            loss = self.nll_obj(out, batch.y)
+            loss = self.loss_obj(out, (batch.y_local, batch.y))
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
@@ -208,10 +212,11 @@ class Trainer:
             self.logger.add_scalars('metrics/loss',
                                     dict(train=train_loss_i, val=val_loss_i),
                                     epoch_i)
-            if (epoch_i+1) % eval_every == 0:
-                if eval_on_train:
-                    self.eval_posterior(epoch_i, **sample_kwargs, on_train=True)
-                self.eval_posterior(epoch_i, **sample_kwargs, on_train=False)
+            if False:
+                if (epoch_i+1) % eval_every == 0:
+                    if eval_on_train:
+                        self.eval_posterior(epoch_i, **sample_kwargs, on_train=True)
+                    self.eval_posterior(epoch_i, **sample_kwargs, on_train=False)
             self.epoch = epoch_i
             # Stop early if val loss doesn't decrease for 10 consecutive epochs
             self.early_stop_crit.append(val_loss_i)
@@ -231,8 +236,8 @@ class Trainer:
         with torch.no_grad():
             for i, batch in enumerate(self.val_loader):
                 batch = batch.to(self.device)
-                out, _ = self.model(batch)
-                loss = self.nll_obj(out, batch.y)
+                out = self.model(batch)
+                loss = self.loss_obj(out, (batch.y_local, batch.y))
                 val_loss += (loss.cpu().item() - val_loss)/(1.0+i)
         self.lr_scheduler.step(val_loss)
         return val_loss
@@ -268,14 +273,14 @@ class Trainer:
                 for mc_iter in range(n_mc_dropout):
                     out, (edge_index, w) = self.model(batch)
                     # Get pred samples
-                    self.nll_obj.set_trained_pred(out)
-                    if 'Double' in self.nll_type:
+                    self.loss_obj.set_trained_pred(out)
+                    if 'Double' in self.loss_type:
                         self.logger.add_histogram('{:s}/w2'.format(prefix),
-                                                  self.nll_obj.w2, epoch_i)
-                    mc_samples = self.nll_obj.sample(Y_mean,
-                                                     Y_std,
-                                                     n_samples,
-                                                     sample_seed=self.seed)
+                                                  self.loss_obj.w2, epoch_i)
+                        mc_samples = self.loss_obj.sample(Y_mean,
+                                                          Y_std,
+                                                          n_samples,
+                                                          sample_seed=self.seed)
                     samples[i*B: (i+1)*B, mc_iter, :, :] = mc_samples
                 edge_index_list.append(edge_index.detach().cpu().numpy())
                 w_list.append(w.detach().cpu().numpy())
@@ -322,6 +327,6 @@ class Trainer:
             metadata.update(self.optim_kwargs)
         if hasattr(self, 'lr_scheduler_kwargs'):
             metadata.update(self.lr_scheduler_kwargs)
-        if hasattr(self, 'nll_obj'):
-            metadata.update({'nll_type': self.nll_type})
+        if hasattr(self, 'loss_obj'):
+            metadata.update({'loss_type': self.loss_type})
         return json.dumps(metadata)

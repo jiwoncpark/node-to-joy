@@ -42,16 +42,19 @@ class CosmoDC2Graph(ConcatDataset):
         ConcatDataset.__init__(self, datasets)
         self.transform_X = None
         self.transform_Y = None
+        self.transform_Y_local = None
 
     @cached_property
     def data_stats(self):
         """Statistics of the X, Y data used for standardizing
 
         """
-        X_mean = 0.0
+        X_mean = 0.0  # [1, sub_features]
         X_std = 0.0
-        Y_mean = 0.0
+        Y_mean = 0.0  # [1, sub_target]
         Y_std = 0.0
+        Y_local_mean = 0.0  # [1, 2] where 2 = halo mass and redshift
+        Y_local_std = 0.0
         dummy_loader = DataLoader(self,
                                   batch_size=100,
                                   shuffle=False,
@@ -60,12 +63,15 @@ class CosmoDC2Graph(ConcatDataset):
         for i, b in enumerate(dummy_loader):
             X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
             X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
+            Y_local_mean += (torch.mean(b.y_local, dim=0, keepdim=True) - Y_local_mean)/(1.0+i)
+            Y_local_std += (torch.std(b.y_local, dim=0, keepdim=True) - Y_local_std)/(1.0+i)
             Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
             Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
             if self.stop_mean_std_early and i > 100:
                 break
         stats = dict(X_mean=X_mean, X_std=X_std,
-                     Y_mean=Y_mean, Y_std=Y_std)
+                     Y_mean=Y_mean, Y_std=Y_std,
+                     Y_local_mean=Y_local_mean, Y_local_std=Y_local_std)
         return stats
 
     def __getitem__(self, idx):
@@ -84,6 +90,8 @@ class CosmoDC2Graph(ConcatDataset):
             data.x = self.transform_X(data.x)
         if self.transform_Y is not None:
             data.y = self.transform_Y(data.y)
+        if self.transform_Y_local is not None:
+            data.y_local = self.transform_Y_local(data.y_local)
         return data
 
 
@@ -173,14 +181,17 @@ class CosmoDC2GraphHealpix(BaseGraph):
         galaxies
 
         """
+        # dtype = dict(zip(columns, [np.float32]*len(columns)))
+        # if 'galaxy_id' in columns:
+        #     dtype['galaxy_id'] = np.int64
         if self.debug:
             cat = pd.read_csv(self.raw_paths[0],
                               chunksize=50, nrows=1000,
-                              usecols=columns)
+                              usecols=columns, dtype=np.float32)
         else:
             cat = pd.read_csv(self.raw_paths[0],
                               chunksize=chunksize, nrows=None,
-                              usecols=columns)
+                              usecols=columns, dtype=np.float32)
         return cat
 
     def get_edges(self, ra_dec):
@@ -219,9 +230,11 @@ class CosmoDC2GraphHealpix(BaseGraph):
             return None
         los_info = self.Y.iloc[i]
         # Init with central galaxy containing masked-out features
-        nodes = pd.DataFrame(self.get_los_node())
+        # Back when central galaxy was given a node
+        # nodes = pd.DataFrame(self.get_los_node())
+        nodes = pd.DataFrame(columns=self.features + ['halo_mass'])
         gals_iter = self.get_gals_iterator(self.healpix,
-                                           self.features)
+                                           self.features + ['halo_mass'])
         for gals_df in gals_iter:
             # Query neighboring galaxies within 3' to sightline
             dist, ra_diff, dec_diff = cu.get_distance(gals_df['ra_true'].values,
@@ -237,11 +250,14 @@ class CosmoDC2GraphHealpix(BaseGraph):
             keep = np.logical_and(dist_keep, mag_keep)
             nodes = nodes.append(gals_df.loc[keep, :], ignore_index=True)
         x = torch.from_numpy(nodes[self.features].values).to(torch.float32)
-        y = torch.FloatTensor([[los_info['final_kappa'],
-                              los_info['final_gamma1'],
-                              los_info['final_gamma2']]])
-        edge_index = self.get_edges(nodes[['ra_true', 'dec_true']].values)
-        data = Subgraph(x, edge_index, y)
+        y_local = torch.from_numpy(nodes[['halo_mass', 'redshift_true']].values).to(torch.float32)
+        y_global = torch.FloatTensor([[los_info['final_kappa'],
+                                     los_info['final_gamma1'],
+                                     los_info['final_gamma2']]])
+        # Vestiges of adhoc edge definitions
+        # edge_index = self.get_edges(nodes[['ra_true', 'dec_true']].values)
+        # data = Subgraph(x, global_y, edge_index)
+        data = Subgraph(x=x, y=y_global, y_local=y_local)
 
         if self.pre_transform is not None:
             data = self.pre_transform(data)
