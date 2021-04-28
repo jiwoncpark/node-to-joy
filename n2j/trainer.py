@@ -125,6 +125,8 @@ class Trainer:
         self.model_kwargs = model_kwargs
         self.model = getattr(models, model_name)(**self.model_kwargs)
         self.model.to(self.device)
+        n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        print(f"Number of params: {n_params}")
 
     def load_state(self, state_path):
         """Load the state dict of the past training
@@ -194,8 +196,8 @@ class Trainer:
         train_loss = 0.0
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
-            out = self.model(batch)
-            loss = self.loss_obj(out, (batch.y_local, batch.y))
+            logp_local, logp_global = self.model(batch)
+            loss = - (logp_local + logp_global)
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
@@ -208,7 +210,8 @@ class Trainer:
         progress = tqdm(range(self.epoch, self.n_epochs))
         for epoch_i in progress:
             train_loss_i = self.train_single_epoch()
-            val_loss_i = self.infer()
+            val_loss_i = self.infer(epoch_i)
+            self.lr_scheduler.step(val_loss_i)
             self.logger.add_scalars('metrics/loss',
                                     dict(train=train_loss_i, val=val_loss_i),
                                     epoch_i)
@@ -230,16 +233,25 @@ class Trainer:
                 self.last_saved_val_loss = val_loss_i
         self.logger.close()
 
-    def infer(self):
+    def infer(self, epoch_i):
         self.model.eval()
         val_loss = 0.0
+        total_logp_local = 0.0
+        total_logp_global = 0.0
         with torch.no_grad():
             for i, batch in enumerate(self.val_loader):
                 batch = batch.to(self.device)
-                out = self.model(batch)
-                loss = self.loss_obj(out, (batch.y_local, batch.y))
+                logp_local, logp_global = self.model(batch)
+                loss = - (logp_local + logp_global)
                 val_loss += (loss.cpu().item() - val_loss)/(1.0+i)
-        self.lr_scheduler.step(val_loss)
+                # Compute metrics
+                local_logp_i = torch.mean(logp_local, dim=0)  # [2,]
+                global_logp_i = torch.mean(logp_global, dim=0)  # [1,]
+                total_logp_local += (local_logp_i - total_logp_local)/(1.0+i)
+                total_logp_global += (global_logp_i - total_logp_global)/(1.0+i)
+        self.logger.add_scalar('val_logp_log10(halo_mass)', total_logp_local[0], epoch_i)
+        self.logger.add_scalar('val_logp_redshift', total_logp_local[1], epoch_i)
+        self.logger.add_scalar('val_logp_kappa', total_logp_global.item(), epoch_i)
         return val_loss
 
     def eval_posterior(self, epoch_i, n_samples=200, n_mc_dropout=20,

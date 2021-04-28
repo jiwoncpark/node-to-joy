@@ -5,6 +5,16 @@ from torch.nn import (Module, ModuleList, ReLU, LayerNorm,
                       Sequential as Seq, Linear as Lin)
 from torch_scatter import scatter_add
 from torch_geometric.nn import MetaLayer
+import torch
+from torch import nn
+from torch import optim
+
+from nflows.flows.base import Flow
+from nflows.distributions.normal import ConditionalDiagonalNormal
+from nflows.transforms.base import CompositeTransform
+from nflows.transforms.autoregressive import MaskedAffineAutoregressiveTransform
+from nflows.transforms.permutations import ReversePermutation
+from nflows.nn.nets import ResidualNet
 
 __all__ = ['N2JNet']
 
@@ -28,9 +38,23 @@ class CustomMetaLayer(MetaLayer):
         return x, u
 
 
+def get_flow(dim_in, dim_hidden, dim_out, n_layers):
+    base_dist = ConditionalDiagonalNormal(shape=[dim_in],
+                                          context_encoder=nn.Linear(dim_out, dim_hidden))
+    transforms = []
+    for _ in range(n_layers):
+        transforms.append(ReversePermutation(features=dim_in))
+        transforms.append(MaskedAffineAutoregressiveTransform(features=dim_in,
+                                                              hidden_features=dim_hidden,
+                                                              context_features=dim_out))
+    transform = CompositeTransform(transforms)
+    flow = Flow(transform, base_dist)
+    return flow
+
+
 class N2JNet(Module):
     def __init__(self, dim_in, dim_out_local, dim_out_global, dim_local, dim_global,
-                 dim_hidden=20, dim_pre_aggr=20, n_iter=20):
+                 dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5):
         super(N2JNet, self).__init__()
         self.dim_in = dim_in
         self.dim_out_local = dim_out_local
@@ -40,13 +64,15 @@ class N2JNet(Module):
         self.dim_global = dim_global
         self.dim_pre_aggr = dim_pre_aggr
         self.n_iter = n_iter
-        # MLP for initially encoding nodes
+        self.n_out_layers = n_out_layers
+        # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
                                  Lin(self.dim_hidden, self.dim_local),
                                  LayerNorm(self.dim_local))
+        # MLPs for encoding local and global
         meta_layers = ModuleList()
         for i in range(self.n_iter):
             node_model = NodeModel(self.dim_local, self.dim_global, self.dim_hidden)
@@ -55,21 +81,16 @@ class N2JNet(Module):
             meta = CustomMetaLayer(node_model=node_model, global_model=global_model)
             meta_layers.append(meta)
         self.meta_layers = meta_layers
-        self.mlp_out_local = Seq(Lin(self.dim_local, self.dim_hidden),
-                                 ReLU(),
-                                 Lin(self.dim_hidden, self.dim_hidden),
-                                 ReLU(),
-                                 Lin(self.dim_hidden, self.dim_out_local))
-        self.mlp_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
-                                  ReLU(),
-                                  Lin(self.dim_hidden, self.dim_hidden),
-                                  ReLU(),
-                                  Lin(self.dim_hidden, self.dim_out_global))
+        # Networks for local and global output
+        self.net_out_local = get_flow(self.dim_local, self.dim_hidden,
+                                      self.dim_out_local, self.n_out_layers)
+        self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
+                                       self.dim_out_global, self.n_out_layers)
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
-        # y_local = data.y_local  # [n_nodes, 2]
-        # y = data.y  # [batch_size, 1]
+        y_local = data.y_local  # [n_nodes, 2]
+        y = data.y  # [batch_size, 1]
         batch = data.batch  # [batch_size,]
         batch_size = data.y.shape[0]
         # Init node and global encodings x, u
@@ -77,9 +98,11 @@ class N2JNet(Module):
         u = torch.zeros(batch_size, self.dim_global).to(x.dtype).to(x.device)
         for i, meta in enumerate(self.meta_layers):
             x, u = meta(x=x, u=u, batch=batch)
-        out_local = self.mlp_out_local(x)
-        out_global = self.mlp_out_global(u)
-        return out_local, out_global
+        # x : [n_nodes, dim_local]
+        # u : [batch_size, dim_global]
+        logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes, 2]
+        logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size, 1]
+        return logp_local, logp_global
 
 
 class NodeModel(Module):

@@ -12,9 +12,9 @@ if __name__ == '__main__':
     IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
     TRAIN_HP = [10327, 10450]
     VAL_HP = [10326]
-    N_TRAIN = 7
-    N_VAL = 7
-    BATCH_SIZE = min(N_TRAIN//5, 25)
+    N_TRAIN = 1000
+    N_VAL = 100
+    BATCH_SIZE = min(N_TRAIN//5, 50)
     CHECKPOINT_PATH = None
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
 
@@ -73,8 +73,9 @@ if __name__ == '__main__':
     # Features to train on
     sub_features = ['ra_true', 'dec_true']
     sub_features += ['size_true']
-    sub_features += ['mag_{:s}_lsst'.format(b) for b in 'i']
-    trainer = Trainer('cuda', checkpoint_dir='test_run', seed=1113)
+    sub_features += ['ellipticity_1_true', 'ellipticity_2_true']
+    sub_features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
+    trainer = Trainer('cuda', checkpoint_dir='results/E1', seed=1113)
 
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
@@ -100,28 +101,34 @@ if __name__ == '__main__':
                          is_train=False,
                          batch_size=BATCH_SIZE,  # FIXME: must be same as train
                          )
-    for b in trainer.train_loader:
-        print(b.x.shape, b.y_local.shape, b.y.shape, b.batch.shape)
-        break
+    print(trainer.Y_local_mean, trainer.Y_local_std)
+    print(trainer.Y_mean, trainer.Y_std)
+    if False:
+        print(trainer.train_dataset[0].y_local)
+        for b in trainer.train_loader:
+            print(b.x.shape, b.y_local.shape, b.y.shape, b.batch.shape)
+            print(b.y_local[:5, 0])
+            break
 
     trainer.configure_loss_fn('MSELoss')
     model_kwargs = dict(dim_in=trainer.X_dim,
                         dim_out_local=2,
                         dim_out_global=1,
-                        dim_local=20,
-                        dim_global=20,
-                        dim_hidden=20,
-                        dim_pre_aggr=20,
-                        n_iter=4
+                        dim_local=40,
+                        dim_global=50,
+                        dim_hidden=40,
+                        dim_pre_aggr=40,
+                        n_iter=20,
+                        n_out_layers=5,
                         )
     trainer.configure_model('N2JNet', model_kwargs)
 
-    trainer.configure_optim(3,
-                            {'lr': 1.e-5, 'weight_decay': 1.e-5},
-                            {'factor': 0.75, 'min_lr': 1.e-7, 'patience': 200, 'verbose': True})
+    trainer.configure_optim(early_stop_memory=100,
+                            optim_kwargs={'lr': 1e-4, 'weight_decay': 1.e-5},
+                            lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7, 'patience': 40, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)
-    trainer.train(n_epochs=5, eval_every=2)
+    trainer.train(n_epochs=1000, eval_every=2)
     sys.exit()
     print(trainer)
     # Save final validation metrics
