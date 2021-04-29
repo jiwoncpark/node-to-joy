@@ -40,7 +40,7 @@ class CustomMetaLayer(MetaLayer):
 
 def get_flow(dim_in, dim_hidden, dim_out, n_layers):
     base_dist = ConditionalDiagonalNormal(shape=[dim_in],
-                                          context_encoder=nn.Linear(dim_out, dim_hidden))
+                                          context_encoder=nn.Linear(dim_out, dim_in*2))
     transforms = []
     for _ in range(n_layers):
         transforms.append(ReversePermutation(features=dim_in))
@@ -100,9 +100,9 @@ class N2JNet(Module):
             x, u = meta(x=x, u=u, batch=batch)
         # x : [n_nodes, dim_local]
         # u : [batch_size, dim_global]
-        logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes, 2]
-        logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size, 1]
-        return logp_local, logp_global
+        logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes,]
+        logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size,]
+        return logp_local.mean(), logp_global.mean()
 
 
 class NodeModel(Module):
@@ -165,7 +165,8 @@ class GlobalModel(Module):
 if __name__ == '__main__':
     net = N2JNet(dim_in=4, dim_out_local=2, dim_out_global=1,
                  dim_local=11, dim_global=7,
-                 dim_hidden=20, dim_pre_aggr=20, n_iter=3)
+                 dim_hidden=19, dim_pre_aggr=21, n_iter=5,
+                 n_out_layers=7)
 
     class Batch:
         def __init__(self, x, y_local, y, batch):
@@ -179,5 +180,10 @@ if __name__ == '__main__':
                   y=torch.randn(3, 1),
                   batch=torch.LongTensor([0, 0, 1, 1, 2]))
 
-    out = net(batch)
+    logp_local, logp_global = net(batch)
+    print(logp_local.shape)
+    print(logp_global.shape)
+
+    n_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+    print(f"Number of params: {n_params}")
 

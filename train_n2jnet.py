@@ -75,7 +75,7 @@ if __name__ == '__main__':
     sub_features += ['size_true']
     sub_features += ['ellipticity_1_true', 'ellipticity_2_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
-    trainer = Trainer('cuda', checkpoint_dir='results/E1', seed=1113)
+    trainer = Trainer('cuda', checkpoint_dir='results/E1', seed=1225)
 
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     trainer.configure_model('N2JNet', model_kwargs)
 
     trainer.configure_optim(early_stop_memory=100,
-                            optim_kwargs={'lr': 1e-4, 'weight_decay': 1.e-5},
+                            optim_kwargs={'lr': 5e-4, 'weight_decay': 1.e-5},
                             lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7, 'patience': 40, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)

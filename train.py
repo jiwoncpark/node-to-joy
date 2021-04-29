@@ -75,7 +75,7 @@ if __name__ == '__main__':
                               healpixes=TRAIN_HP,
                               n_data=[N_TRAIN]*len(TRAIN_HP),
                               aperture_size=1.0,
-                              stop_mean_std_early=True,
+                              stop_mean_std_early=False,
                               in_dir=IN_DIR),
                          sub_features=sub_features,
                          is_train=True,
