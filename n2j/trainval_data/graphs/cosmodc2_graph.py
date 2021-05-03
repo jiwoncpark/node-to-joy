@@ -243,6 +243,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
                                                       los_info['dec'])
             gals_df['ra_true'] = ra_diff  # deg
             gals_df['dec_true'] = dec_diff  # deg
+            gals_df['r'] = dist
             dist_keep = np.logical_and(dist < self.aperture_size/60.0,
                                        dist > 1.e-7)  # exclude LOS gal
             mag_keep = np.logical_and(gals_df['mag_i_lsst'].values > self.mag_lower,
@@ -253,11 +254,13 @@ class CosmoDC2GraphHealpix(BaseGraph):
         y_local = torch.from_numpy(nodes[['halo_mass', 'redshift_true']].values).to(torch.float32)
         y_global = torch.FloatTensor([[los_info['final_kappa'],
                                      los_info['final_gamma1'],
-                                     los_info['final_gamma2']]])
+                                     los_info['final_gamma2']]])  # [1, 3]
+        x_meta = torch.FloatTensor([[x.shape[0],
+                                   np.sum(1.0/nodes['r'].values)]])  # [1, 2]
         # Vestiges of adhoc edge definitions
         # edge_index = self.get_edges(nodes[['ra_true', 'dec_true']].values)
         # data = Subgraph(x, global_y, edge_index)
-        data = Subgraph(x=x, y=y_global, y_local=y_local)
+        data = Subgraph(x=x, y=y_global, y_local=y_local, x_meta=x_meta)
 
         if self.pre_transform is not None:
             data = self.pre_transform(data)
