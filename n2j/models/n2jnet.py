@@ -82,10 +82,18 @@ class N2JNet(Module):
             meta_layers.append(meta)
         self.meta_layers = meta_layers
         # Networks for local and global output
-        self.net_out_local = get_flow(self.dim_local, self.dim_hidden,
-                                      self.dim_out_local, self.n_out_layers)
-        self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
-                                       self.dim_out_global, self.n_out_layers)
+        self.net_out_local = Seq(Lin(self.dim_local, self.dim_hidden),
+                                 ReLU(),
+                                 Lin(self.dim_hidden, self.dim_hidden),
+                                 ReLU(),
+                                 Lin(self.dim_hidden, self.dim_out_local*2))
+        self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
+                                  ReLU(),
+                                  Lin(self.dim_hidden, self.dim_hidden),
+                                  ReLU(),
+                                  Lin(self.dim_hidden, self.dim_out_global*2))
+        # self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
+        #                                self.dim_out_global, self.n_out_layers)
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
@@ -100,9 +108,19 @@ class N2JNet(Module):
             x, u = meta(x=x, u=u, batch=batch)
         # x : [n_nodes, dim_local]
         # u : [batch_size, dim_global]
-        logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes,]
-        logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size,]
-        return logp_local.mean(), logp_global.mean()
+        # logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes,]
+        # logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size,]
+        # Local out
+        out_local = self.net_out_local(x)  # [n_nodes, dim_local_out*2]
+        mu_local, logvar_local = torch.split(out_local, self.dim_out_local, dim=-1)
+        precision_local = torch.exp(-logvar_local)
+        logp_local = - precision_local * (y_local - mu_local)**2.0 - logvar_local  # [n_nodes, 2]
+        # Global out
+        out_global = self.net_out_global(u)  # [batch_size, dim_global_out*2]
+        mu_global, logvar_global = torch.split(out_global, self.dim_out_global, dim=-1)
+        precision_global = torch.exp(-logvar_global)
+        logp_global = - precision_global * (y - mu_global)**2.0 - logvar_global  # [n_nodes, 2]
+        return out_local, out_global, logp_local.mean(), logp_global.mean()
 
 
 class NodeModel(Module):
@@ -180,7 +198,8 @@ if __name__ == '__main__':
                   y=torch.randn(3, 1),
                   batch=torch.LongTensor([0, 0, 1, 1, 2]))
 
-    logp_local, logp_global = net(batch)
+    out_local, logp_local, logp_global = net(batch)
+    print(out_local.shape)
     print(logp_local.shape)
     print(logp_global.shape)
 

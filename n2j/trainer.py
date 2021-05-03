@@ -196,8 +196,8 @@ class Trainer:
         train_loss = 0.0
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
-            logp_local, logp_global = self.model(batch)
-            loss = - (logp_local.mean() + logp_global.mean())
+            _, _, logp_local, logp_global = self.model(batch)
+            loss = - (0.01*logp_local.mean() + logp_global.mean())
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
@@ -241,7 +241,7 @@ class Trainer:
         with torch.no_grad():
             for i, batch in enumerate(self.val_loader):
                 batch = batch.to(self.device)
-                logp_local, logp_global = self.model(batch)
+                _, _, logp_local, logp_global = self.model(batch)
                 loss = - (logp_local + logp_global)
                 val_loss += (loss.cpu().item() - val_loss)/(1.0+i)
                 # Compute metrics
