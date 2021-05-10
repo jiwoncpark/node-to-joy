@@ -178,12 +178,14 @@ class Trainer:
         torch.save(state, self.model_path)
 
     def configure_optim(self, early_stop_memory=20,
+                        weight_local_loss=0.1,
                         optim_kwargs={},
                         lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7}):
         """Configure optimization-related objects
 
         """
         self.early_stop_memory = early_stop_memory
+        self.weight_local_loss = weight_local_loss
         self.optim_kwargs = optim_kwargs
         self.lr_scheduler_kwargs = lr_scheduler_kwargs
         self.optimizer = optim.Adam(self.model.parameters(), **self.optim_kwargs)
@@ -196,8 +198,10 @@ class Trainer:
         train_loss = 0.0
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
-            _, _, logp_local, logp_global = self.model(batch)
-            loss = - (0.01*logp_local.mean() + logp_global.mean())
+            x, u = self.model(batch)
+            loss_local, loss_global = self.model.loss(x, u, batch)
+            loss = self.weight_local_loss*loss_local + loss_global
+            self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
@@ -241,12 +245,13 @@ class Trainer:
         with torch.no_grad():
             for i, batch in enumerate(self.val_loader):
                 batch = batch.to(self.device)
-                _, _, logp_local, logp_global = self.model(batch)
-                loss = - (logp_local + logp_global)
+                x, u = self.model(batch)
+                loss_local, loss_global = self.model.loss(x, u, batch)
+                loss = self.weight_local_loss*loss_local + loss_global
                 val_loss += (loss.cpu().item() - val_loss)/(1.0+i)
                 # Compute metrics
-                total_nll_local += (-logp_local - total_nll_local)/(1.0+i)  # [1,]
-                total_nll_global += (-logp_global - total_nll_global)/(1.0+i)  # [1,]
+                total_nll_local += (loss_local - total_nll_local)/(1.0+i)  # [1,]
+                total_nll_global += (loss_global - total_nll_global)/(1.0+i)  # [1,]
         self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
         self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
         return val_loss
