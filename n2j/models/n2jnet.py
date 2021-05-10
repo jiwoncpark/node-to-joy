@@ -54,7 +54,8 @@ def get_flow(dim_in, dim_hidden, dim_out, n_layers):
 
 class N2JNet(Module):
     def __init__(self, dim_in, dim_out_local, dim_out_global, dim_local, dim_global,
-                 dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5):
+                 dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
+                 global_flow=False):
         super(N2JNet, self).__init__()
         self.dim_in = dim_in
         self.dim_out_local = dim_out_local
@@ -65,6 +66,7 @@ class N2JNet(Module):
         self.dim_pre_aggr = dim_pre_aggr
         self.n_iter = n_iter
         self.n_out_layers = n_out_layers
+        self.global_flow = global_flow
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -87,18 +89,18 @@ class N2JNet(Module):
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
                                  Lin(self.dim_hidden, self.dim_out_local*2))
-        self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
-                                  ReLU(),
-                                  Lin(self.dim_hidden, self.dim_hidden),
-                                  ReLU(),
-                                  Lin(self.dim_hidden, self.dim_out_global*2))
-        # self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
-        #                                self.dim_out_global, self.n_out_layers)
+        if self.global_flow:
+            self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
+                                           self.dim_out_global, self.n_out_layers)
+        else:
+            self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
+                                      ReLU(),
+                                      Lin(self.dim_hidden, self.dim_hidden),
+                                      ReLU(),
+                                      Lin(self.dim_hidden, self.dim_out_global*2))
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
-        y_local = data.y_local  # [n_nodes, 2]
-        y = data.y  # [batch_size, 1]
         batch = data.batch  # [batch_size,]
         batch_size = data.y.shape[0]
         # Init node and global encodings x, u
@@ -108,19 +110,34 @@ class N2JNet(Module):
             x, u = meta(x=x, u=u, batch=batch)
         # x : [n_nodes, dim_local]
         # u : [batch_size, dim_global]
-        # logp_local = self.net_out_local.log_prob(x, context=y_local)  # [n_nodes,]
-        # logp_global = self.net_out_global.log_prob(u, context=y)  # [batch_size,]
-        # Local out
-        out_local = self.net_out_local(x)  # [n_nodes, dim_local_out*2]
-        mu_local, logvar_local = torch.split(out_local, self.dim_out_local, dim=-1)
+        x = self.net_out_local(x)  # [n_nodes, dim_local_out*2]
+        if not self.global_flow:
+            u = self.net_out_global(u)  # [batch_size, dim_global_out*2]
+        return x, u
+
+    def local_loss(self, x, data):
+        y_local = data.y_local  # [n_nodes, 2]
+        mu_local, logvar_local = torch.split(x, self.dim_out_local, dim=-1)
         precision_local = torch.exp(-logvar_local)
-        logp_local = - precision_local * (y_local - mu_local)**2.0 - logvar_local  # [n_nodes, 2]
-        # Global out
-        out_global = self.net_out_global(u)  # [batch_size, dim_global_out*2]
-        mu_global, logvar_global = torch.split(out_global, self.dim_out_global, dim=-1)
-        precision_global = torch.exp(-logvar_global)
-        logp_global = - precision_global * (y - mu_global)**2.0 - logvar_global  # [n_nodes, 2]
-        return out_local, out_global, logp_local.mean(), logp_global.mean()
+        nlogp_local = precision_local * (y_local - mu_local)**2.0 + logvar_local  # [n_nodes, 2]
+        nlogp_local = nlogp_local.mean()
+        return nlogp_local
+
+    def global_loss(self, u, data):
+        y = data.y
+        if self.global_flow:
+            nlogp_global = - self.net_out_global.log_prob(u, context=y)  # [batch_size,]
+        else:
+            mu_global, logvar_global = torch.split(u, self.dim_out_global, dim=-1)
+            precision_global = torch.exp(-logvar_global)
+            nlogp_global = precision_global * (y - mu_global)**2.0 + logvar_global
+        nlogp_global = nlogp_global.mean()
+        return nlogp_global
+
+    def loss(self, x, u, data):
+        local_loss = self.local_loss(x, data)
+        global_loss = self.global_loss(u, data)
+        return local_loss, global_loss
 
 
 class NodeModel(Module):
