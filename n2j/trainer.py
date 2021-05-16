@@ -58,14 +58,20 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
-                     sub_features=None, sub_target=None):
+                     sub_features=None, sub_target=None, sub_target_local=None):
         self.batch_size = batch_size
+        # X metadata
         features = data_kwargs['features']
         self.sub_features = sub_features if sub_features else features
         self.X_dim = len(self.sub_features)
+        # Global y metadata
         target = ['final_kappa', 'final_gamma1', 'final_gamma2']
         self.sub_target = sub_target if sub_target else target
         self.Y_dim = len(self.sub_target)
+        # Lobal y metadata
+        target_local = ['halo_mass', 'redshift']
+        self.sub_target_local = sub_target_local if sub_target_local else target_local
+        self.Y_local_dim = len(self.sub_target_local)
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
@@ -93,9 +99,16 @@ class Trainer:
             else:
                 self.transform_Y = Standardizer(self.Y_mean, self.Y_std)
             # Transforming local Y
-            self.Y_local_mean = stats['Y_local_mean']
-            self.Y_local_std = stats['Y_local_std']
-            self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+            if sub_target_local:
+                idx_Y_local = get_idx(target_local, sub_target_local)
+                self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
+                self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
+                slicing_Y_local = Slicer(idx_Y_local)
+                norming_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                self.transform_Y_local = transforms.Compose([slicing_Y_local,
+                                                            norming_Y_local])
+            else:
+                self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
@@ -193,9 +206,10 @@ class Trainer:
         self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
                                                                  **self.lr_scheduler_kwargs)
 
-    def train_single_epoch(self):
+    def train_single_epoch(self, epoch_i):
         self.model.train()
         train_loss = 0.0
+        n_batches = len(self.train_loader)
         for i, batch in enumerate(self.train_loader):
             batch = batch.to(self.device)
             x, u = self.model(batch)
@@ -205,6 +219,8 @@ class Trainer:
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
+            self.logger.add_scalar('metrics/iter_loss', train_loss,
+                                   epoch_i*n_batches + i)
         return train_loss
 
     def train(self, n_epochs, eval_every=1, eval_on_train=False, sample_kwargs={}):
@@ -213,7 +229,7 @@ class Trainer:
         self.n_epochs = n_epochs
         progress = tqdm(range(self.epoch, self.n_epochs))
         for epoch_i in progress:
-            train_loss_i = self.train_single_epoch()
+            train_loss_i = self.train_single_epoch(epoch_i)
             val_loss_i = self.infer(epoch_i)
             self.lr_scheduler.step(val_loss_i)
             self.logger.add_scalars('metrics/loss',
