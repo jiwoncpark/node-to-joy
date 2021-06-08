@@ -18,7 +18,7 @@ if __name__ == '__main__':
     CHECKPOINT_PATH = None
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
     SUB_TARGET_LOCAL = ['redshift']
-    CHECKPOINT_DIR = 'results/E1'
+    CHECKPOINT_DIR = 'results/E0'
     SKIP_RAYTRACING = True
 
     ##############
@@ -80,14 +80,14 @@ if __name__ == '__main__':
     # sub_features += ['size_true']
     # sub_features += ['ellipticity_1_true', 'ellipticity_2_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
-    trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1025)
+    trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
 
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=[N_TRAIN]*len(TRAIN_HP),
                               aperture_size=1.0,
-                              stop_mean_std_early=True,
+                              stop_mean_std_early=False,
                               in_dir=IN_DIR),
                          sub_features=sub_features,
                          sub_target=SUB_TARGET,
@@ -134,8 +134,8 @@ if __name__ == '__main__':
     trainer.configure_model('N2JNet', model_kwargs)
 
     trainer.configure_optim(early_stop_memory=50,
-                            weight_local_loss=0.1,
-                            optim_kwargs={'lr': 1e-5, 'weight_decay': 1.e-5},
+                            weight_local_loss=0.01,
+                            optim_kwargs={'lr': 1e-3, 'weight_decay': 1.e-5},
                             lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7, 'patience': 5, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)
