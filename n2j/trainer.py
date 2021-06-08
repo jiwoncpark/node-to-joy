@@ -8,11 +8,13 @@ import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
+from torch.utils.data.sampler import WeightedRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.losses as losses
 import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
+import matplotlib.pyplot as plt
 
 
 def get_idx(orig_list, sub_list):
@@ -36,8 +38,7 @@ class Trainer:
         self.seed = seed
         self.seed_everything()
         self.checkpoint_dir = checkpoint_dir
-        if not os.path.exists(self.checkpoint_dir):
-            os.mkdir(self.checkpoint_dir)
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.logger = SummaryWriter(os.path.join(self.checkpoint_dir, 'runs'))
         self.epoch = 0
         self.early_stop_crit = []
@@ -75,7 +76,11 @@ class Trainer:
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
-            stats = self.train_dataset.data_stats
+            if os.path.exists(os.path.join(self.checkpoint_dir, 'stats.pt')):
+                stats = torch.load(os.path.join(self.checkpoint_dir, 'stats.pt'))
+            else:
+                stats = self.train_dataset.data_stats
+                torch.save(stats, os.path.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
             if sub_features:
                 idx = get_idx(features, sub_features)
@@ -112,9 +117,12 @@ class Trainer:
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
+            self.class_weight = stats['class_weight']
+            sampler = WeightedRandomSampler(stats['y_weight'],
+                                            num_samples=len(self.train_dataset))
             self.train_loader = DataLoader(self.train_dataset,
                                            batch_size=self.batch_size,
-                                           shuffle=True,
+                                           sampler=sampler,
                                            num_workers=4,
                                            drop_last=True)
         else:
@@ -138,6 +146,8 @@ class Trainer:
         self.model_kwargs = model_kwargs
         self.model = getattr(models, model_name)(**self.model_kwargs)
         self.model.to(self.device)
+        self.model.class_weight = self.class_weight.to(self.device)
+        print(self.model.class_weight)
         n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"Number of params: {n_params}")
 
@@ -211,11 +221,11 @@ class Trainer:
         train_loss = 0.0
         n_batches = len(self.train_loader)
         for i, batch in enumerate(self.train_loader):
+            self.optimizer.zero_grad()
             batch = batch.to(self.device)
             x, u = self.model(batch)
             loss_local, loss_global = self.model.loss(x, u, batch)
             loss = self.weight_local_loss*loss_local + loss_global
-            self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
@@ -268,9 +278,35 @@ class Trainer:
                 # Compute metrics
                 total_nll_local += (loss_local - total_nll_local)/(1.0+i)  # [1,]
                 total_nll_global += (loss_global - total_nll_global)/(1.0+i)  # [1,]
-        self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
-        self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
+            self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
+            self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
+            self._log_kappa_recovery(epoch_i, x.cpu(), u.cpu(), batch.y.cpu())
         return val_loss
+
+    def _log_kappa_recovery(self, epoch_i, x, u, y):
+        # Convert into mu, sig over normed target
+        mu_pred_normed, sig_pred_normed = torch.split(x, len(self.sub_target_local), dim=-1)
+        mu_pred_global_normed, sig_pred_global_normed = torch.split(u, 1, dim=-1)
+        sig_pred_normed = torch.exp(0.5*sig_pred_normed)
+        sig_pred_global_normed = torch.exp(0.5*sig_pred_global_normed)
+        # Convert into mu, sig over original target
+        mu_global_pred = mu_pred_global_normed*self.Y_std + self.Y_mean
+        sig_global_pred = sig_pred_global_normed*self.Y_std
+        y = y*self.Y_std + self.Y_mean
+        # Convert to numpy
+        mu_global_pred = mu_global_pred.squeeze().numpy()
+        sig_global_pred = sig_global_pred.squeeze().numpy()
+        y = y.squeeze().numpy()
+        # Plot
+        fig, ax = plt.subplots()
+        ax.errorbar(y, y=mu_global_pred, yerr=sig_global_pred,
+                    marker='.', fmt='o')
+        interval = np.linspace(np.min(y), np.max(y), 20)
+        ax.plot(interval, interval, linestyle='--')
+        ax.set_xlabel(r"True kappa")
+        ax.set_ylabel(r"Pred kappa")
+        self.logger.add_figure('kappa recovery', fig, global_step=epoch_i)
+        plt.close('all')
 
     def eval_posterior(self, epoch_i, n_samples=200, n_mc_dropout=20,
                        on_train=False):
