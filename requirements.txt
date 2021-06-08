@@ -1,5 +1,4 @@
-git+https://github.com/jiwoncpark/lenstronomy.git@main
-git+https://github.com/jiwoncpark/skypy.git@master
+lenstronomy
 future
 numpy
 matplotlib
