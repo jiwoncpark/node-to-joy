@@ -53,13 +53,16 @@ class CosmoDC2Graph(ConcatDataset):
         X_std = 0.0
         Y_mean = 0.0  # [1, sub_target]
         Y_std = 0.0
-        Y_local_mean = 0.0  # [1, 2] where 2 = halo mass and redshift
+        Y_local_mean = 0.0  # [1, 2] where 2 is from [halo mass, redshift]
         Y_local_std = 0.0
+        y_class_counts = 0  # [n_classes,] where n_classes = number of bins
+        y_class = torch.zeros(len(self), dtype=torch.long)  # [n_train, 1]
         dummy_loader = DataLoader(self,
-                                  batch_size=100,
+                                  batch_size=1000,
                                   shuffle=False,
                                   num_workers=4,
                                   drop_last=False)
+        print("Generating standardizing metadata...")
         for i, b in enumerate(dummy_loader):
             X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
             X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
@@ -67,11 +70,17 @@ class CosmoDC2Graph(ConcatDataset):
             Y_local_std += (torch.std(b.y_local, dim=0, keepdim=True) - Y_local_std)/(1.0+i)
             Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
             Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
+            y_class_counts += torch.bincount(b.y_class, minlength=4)
+            print(y_class_counts)
+            y_class[i*1000:(i+1)*1000] = b.y_class
             if self.stop_mean_std_early and i > 100:
                 break
+        class_weight = torch.sum(y_class_counts)/y_class_counts
         stats = dict(X_mean=X_mean, X_std=X_std,
                      Y_mean=Y_mean, Y_std=Y_std,
-                     Y_local_mean=Y_local_mean, Y_local_std=Y_local_std)
+                     Y_local_mean=Y_local_mean, Y_local_std=Y_local_std,
+                     y_weight=class_weight[y_class],
+                     class_weight=class_weight)
         return stats
 
     def __getitem__(self, idx):
@@ -112,7 +121,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
     def __init__(self, healpix, in_dir, raytracing_out_dir,
                  aperture_size, n_data, features,
                  debug=False,):
-        self.in_dir = in_dir if in_dir else '/global/cscratch1/sd/jwp/n2j'
+        self.in_dir = in_dir if in_dir else '/global/cscratch1/sd/jwp/n2j/data'
         self.healpix = healpix
         self.features = features
         self.closeness = 0.5/60.0  # deg, edge criterion between neighbors
@@ -222,12 +231,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         edge_index = torch.LongTensor(list(edge_index)).transpose(0, 1)
         return edge_index
 
-    def process_single(self, i):
-        """Process a single sightline indexed i
-
-        """
-        if os.path.exists(self.processed_file_path_fmt.format(i)):
-            return None
+    def _save_graph_to_disk(self, i):
         los_info = self.Y.iloc[i]
         # Init with central galaxy containing masked-out features
         # Back when central galaxy was given a node
@@ -260,12 +264,30 @@ class CosmoDC2GraphHealpix(BaseGraph):
         # Vestiges of adhoc edge definitions
         # edge_index = self.get_edges(nodes[['ra_true', 'dec_true']].values)
         # data = Subgraph(x, global_y, edge_index)
-        data = Subgraph(x=x, y=y_global, y_local=y_local, x_meta=x_meta)
-
+        y_class = self._get_y_class(y_global)
+        data = Subgraph(x=x, y=y_global, y_local=y_local, x_meta=x_meta,
+                        y_class=y_class)
         if self.pre_transform is not None:
             data = self.pre_transform(data)
-
         torch.save(data, self.processed_file_path_fmt.format(i))
+
+    def _get_y_class(self, y):
+        y_class = torch.bucketize(y[:, 0],  # only kappa
+                                  boundaries=torch.Tensor([0.0, 0.03, 0.05, 10.0]))
+        return y_class
+
+    def process_single(self, i):
+        """Process a single sightline indexed i
+
+        """
+        if not os.path.exists(self.processed_file_path_fmt.format(i)):
+            self._save_graph_to_disk(i)
+        # else:
+        #    self._save_graph_to_disk(i)
+        # else:
+        # data = torch.load(self.processed_file_path_fmt.format(i))
+        # data.y_class = self._get_y_class(data.y)
+        # torch.save(data, self.processed_file_path_fmt.format(i))
 
     def process(self):
         """Process multiple sightline in parallel
