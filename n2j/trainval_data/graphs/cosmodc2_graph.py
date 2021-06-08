@@ -23,9 +23,10 @@ class CosmoDC2Graph(ConcatDataset):
 
     """
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
-                 n_data, features, stop_mean_std_early=False):
+                 n_data, features, stop_mean_std_early=False, n_cores=20):
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
+        self.n_cores = n_cores
         datasets = []
         Y_list = []
         for i in range(self.n_datasets):
@@ -35,6 +36,7 @@ class CosmoDC2Graph(ConcatDataset):
                                             aperture_size,
                                             n_data[i],
                                             features,
+                                            n_cores=self.n_cores,
                                             )
             datasets.append(graph_hp)
             Y_list.append(graph_hp.Y)
@@ -120,10 +122,12 @@ class CosmoDC2GraphHealpix(BaseGraph):
 
     def __init__(self, healpix, in_dir, raytracing_out_dir,
                  aperture_size, n_data, features,
+                 n_cores=20,
                  debug=False,):
         self.in_dir = in_dir if in_dir else '/global/cscratch1/sd/jwp/n2j/data'
         self.healpix = healpix
         self.features = features
+        self.n_cores = n_cores
         self.closeness = 0.5/60.0  # deg, edge criterion between neighbors
         self.mag_lower = 18.5  # lower magnitude cut, excludes stars
         # LSST gold sample i-band mag (Gorecki et al 2014)
@@ -236,9 +240,9 @@ class CosmoDC2GraphHealpix(BaseGraph):
         # Init with central galaxy containing masked-out features
         # Back when central galaxy was given a node
         # nodes = pd.DataFrame(self.get_los_node())
-        nodes = pd.DataFrame(columns=self.features + ['halo_mass'])
+        nodes = pd.DataFrame(columns=self.features + ['halo_mass', 'stellar_mass'])
         gals_iter = self.get_gals_iterator(self.healpix,
-                                           self.features + ['halo_mass'])
+                                           self.features + ['halo_mass', 'stellar_mass'])
         for gals_df in gals_iter:
             # Query neighboring galaxies within 3' to sightline
             dist, ra_diff, dec_diff = cu.get_distance(gals_df['ra_true'].values,
@@ -255,7 +259,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
             keep = np.logical_and(dist_keep, mag_keep)
             nodes = nodes.append(gals_df.loc[keep, :], ignore_index=True)
         x = torch.from_numpy(nodes[self.features].values).to(torch.float32)
-        y_local = torch.from_numpy(nodes[['halo_mass', 'redshift_true']].values).to(torch.float32)
+        y_local = torch.from_numpy(nodes[['halo_mass', 'stellar_mass', 'redshift_true']].values).to(torch.float32)
         y_global = torch.FloatTensor([[los_info['final_kappa'],
                                      los_info['final_gamma1'],
                                      los_info['final_gamma2']]])  # [1, 3]
@@ -293,9 +297,8 @@ class CosmoDC2GraphHealpix(BaseGraph):
         """Process multiple sightline in parallel
 
         """
-        n_cores = min(multiprocessing.cpu_count() - 1, self.n_data)
-        print("Parallelizing across {:d} cores...".format(n_cores))
-        with multiprocessing.Pool(n_cores) as pool:
+        print("Parallelizing across {:d} cores...".format(self.n_cores))
+        with multiprocessing.Pool(self.n_cores) as pool:
             return list(tqdm(pool.imap(self.process_single,
                                        range(self.n_data)),
                              total=self.n_data))
