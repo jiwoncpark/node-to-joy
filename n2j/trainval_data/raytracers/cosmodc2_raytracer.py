@@ -30,7 +30,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
     COLUMN_NAMING = column_naming
     TO_200C = 0.85  # multiply FOF (b=0.168) masses by this to get 200c masses
 
-    def __init__(self, in_dir, out_dir, fov, n_kappa_samples, healpix,
+    def __init__(self, in_dir, out_dir, fov, n_kappa_samples, healpix, seed,
                  approx_z_src=2.0, mass_cut=11, n_sightlines=1000,
                  kappa_sampling_dir=None, debug=False):
         """
@@ -53,7 +53,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
             number of sightlines to raytrace through (Default: 1000)
 
         """
-        self.seed = 123
+        self.seed = seed
         self.rng = np.random.default_rng(seed=self.seed)
         BaseRaytracer.__init__(self, in_dir, out_dir, debug)
         self.fov = fov
@@ -343,11 +343,10 @@ class CosmoDC2Raytracer(BaseRaytracer):
                 continue
         np.save(self.k_samples_fmt.format(i), kappa_samples)
 
-    def parallel_raytrace(self):
+    def parallel_raytrace(self, n_cores):
         """Raytrace through multiple sightlines in parallel
 
         """
-        n_cores = min(multiprocessing.cpu_count() - 1, self.n_sightlines)
         with multiprocessing.Pool(n_cores) as pool:
             return list(tqdm(pool.imap(self.single_raytrace,
                                        range(self.n_sightlines)),
