@@ -55,7 +55,7 @@ def get_flow(dim_in, dim_hidden, dim_out, n_layers):
 class N2JNet(Module):
     def __init__(self, dim_in, dim_out_local, dim_out_global, dim_local, dim_global,
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
-                 global_flow=False):
+                 global_flow=False, class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0])):
         super(N2JNet, self).__init__()
         self.dim_in = dim_in
         self.dim_out_local = dim_out_local
@@ -67,6 +67,7 @@ class N2JNet(Module):
         self.n_iter = n_iter
         self.n_out_layers = n_out_layers
         self.global_flow = global_flow
+        self.class_weight = class_weight
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -120,7 +121,7 @@ class N2JNet(Module):
         mu_local, logvar_local = torch.split(x, self.dim_out_local, dim=-1)
         precision_local = torch.exp(-logvar_local)
         nlogp_local = precision_local * (y_local - mu_local)**2.0 + logvar_local  # [n_nodes, 2]
-        nlogp_local = nlogp_local.mean()
+        nlogp_local = nlogp_local.mean(dim=-1)  # [n_nodes,]
         return nlogp_local
 
     def global_loss(self, u, data):
@@ -131,13 +132,18 @@ class N2JNet(Module):
             mu_global, logvar_global = torch.split(u, self.dim_out_global, dim=-1)
             precision_global = torch.exp(-logvar_global)
             nlogp_global = precision_global * (y - mu_global)**2.0 + logvar_global
-        nlogp_global = nlogp_global.mean()
+            nlogp_global = nlogp_global.mean(dim=-1)  # [batch_size,]
         return nlogp_global
 
     def loss(self, x, u, data):
-        local_loss = self.local_loss(x, data)
-        global_loss = self.global_loss(u, data)
-        return local_loss, global_loss
+        local_loss = self.local_loss(x, data)  # [n_nodes,]
+        local_loss = scatter_add(local_loss, data.batch, dim=0)  # [batch_size,]
+        global_loss = self.global_loss(u, data)  # [batch_size,]
+        # Weight by inverse class number counts
+        y_weight = 1.0/self.class_weight[data.y_class].squeeze()
+        local_loss *= y_weight
+        global_loss *= y_weight
+        return local_loss.mean(), global_loss.mean()
 
 
 class NodeModel(Module):
@@ -149,8 +155,10 @@ class NodeModel(Module):
         self.dim_hidden = dim_hidden
         self.dim_concat = self.dim_local + self.dim_global
         self.mlp = Seq(Lin(self.dim_concat, self.dim_hidden),
+                       LayerNorm(self.dim_hidden),
                        ReLU(),
                        Lin(self.dim_hidden, self.dim_hidden),
+                       LayerNorm(self.dim_hidden),
                        ReLU(),
                        Lin(self.dim_hidden, self.dim_local),
                        LayerNorm(self.dim_local))
@@ -204,21 +212,29 @@ if __name__ == '__main__':
                  n_out_layers=7)
 
     class Batch:
-        def __init__(self, x, y_local, y, batch):
+        def __init__(self, x, y_local, y, y_class, batch):
             self.x = x
             self.y_local = y_local
             self.y = y
+            self.y_class = y_class
             self.batch = batch
 
     batch = Batch(x=torch.randn(5, 4),
                   y_local=torch.randn(5, 2),
                   y=torch.randn(3, 1),
+                  y_class=torch.tensor([2, 3, 3]).long(),
                   batch=torch.LongTensor([0, 0, 1, 1, 2]))
 
-    out_local, logp_local, logp_global = net(batch)
-    print(out_local.shape)
-    print(logp_local.shape)
-    print(logp_global.shape)
+    x, u = net(batch)
+    print(x.shape)
+    print(u.shape)
+    print("local loss: ", net.local_loss(x, batch).shape)
+    print("global loss: ", net.global_loss(u, batch).shape)
+    local_loss, global_loss = net.loss(x, u, batch)
+    print("loss: ", local_loss.shape, global_loss.shape)
+    print(local_loss.cpu().item())
+    print((local_loss/2.0 + 0.0).item())
+
 
     n_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     print(f"Number of params: {n_params}")
