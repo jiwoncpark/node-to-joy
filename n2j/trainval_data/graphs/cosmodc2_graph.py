@@ -73,7 +73,6 @@ class CosmoDC2Graph(ConcatDataset):
             Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
             Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
             y_class_counts += torch.bincount(b.y_class, minlength=4)
-            print(y_class_counts)
             y_class[i*1000:(i+1)*1000] = b.y_class
             if self.stop_mean_std_early and i > 100:
                 break
