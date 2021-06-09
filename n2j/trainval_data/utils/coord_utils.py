@@ -8,7 +8,48 @@ import numpy as np
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
-from skypy.position import uniform_around
+
+TWO_PI = 2*np.pi
+
+
+@u.quantity_input(area=u.sr)
+def uniform_around(centre, area, size):
+    '''Uniform distribution of points around location.
+    Draws randomly distributed points from a circular region of the given area
+    around the centre point.
+
+    Parameters
+    ----------
+    centre : `~astropy.coordinates.SkyCoord`
+        Centre of the sampling region.
+    area : `~astropy.units.Quantity`
+        Area of the sampling region as a `~astropy.units.Quantity` in units of
+        solid angle.
+    size : int
+        Number of points to draw.
+
+    Returns
+    -------
+    coords : `~astropy.coordinates.SkyCoord`
+        Randomly distributed points around the centre. The coordinates are
+        returned in the same frame as the input.
+
+    Examples
+    --------
+    See :ref:`User Documentation <skypy.position.uniform_around>`.
+    Modified from the skypy implementation: https://github.com/skypyproject/skypy
+
+    '''
+
+    # get cosine of maximum separation from area
+    cos_theta_max = 1 - area.to_value(u.sr)/TWO_PI
+
+    # randomly sample points within separation
+    theta = np.arccos(np.random.uniform(cos_theta_max, 1, size=size))
+    phi = np.random.uniform(0, TWO_PI, size=size)
+
+    # construct random sky coordinates around centre
+    return centre.directional_offset_by(phi, theta)
 
 
 def upgrade_healpix(pix_id, nested, nside_in, nside_out):
