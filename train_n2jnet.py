@@ -10,9 +10,9 @@ from n2j.trainer import Trainer
 
 if __name__ == '__main__':
     IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
-    TRAIN_HP = [10450, 10327, 10200]
+    TRAIN_HP = [10450, 10327, 10200, 10199]
     VAL_HP = [10326]
-    N_TRAIN = 20000
+    N_TRAIN = [20000, 20000, 20000, 40000]
     N_VAL = 100
     BATCH_SIZE = 1000  # min(N_TRAIN//5, 50)
     CHECKPOINT_PATH = None
@@ -37,18 +37,19 @@ if __name__ == '__main__':
         kappa_sampler.apply_calibration()
     if not SKIP_RAYTRACING:
         # Use this to infer the mean kappa contribution of new sightlines
-        for hp in TRAIN_HP:
+        for i, hp in enumerate(TRAIN_HP):
             train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
                                                   out_dir=f'Y_{hp}',
                                                   fov=0.85,
                                                   healpix=hp,
-                                                  n_sightlines=N_TRAIN,  # many more LOS
+                                                  n_sightlines=N_TRAIN[i],  # many more LOS
                                                   mass_cut=11.0,
                                                   n_kappa_samples=0,
                                                   kappa_sampling_dir='kappa_sampling')  # no sampling
             train_Y_generator.parallel_raytrace()
             train_Y_generator.apply_calibration()
 
+    if False:
         for hp in VAL_HP:
             # Use on a different healpix
             val_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
@@ -61,6 +62,7 @@ if __name__ == '__main__':
                                                 kappa_sampling_dir='kappa_sampling')  # no sampling
             val_Y_generator.parallel_raytrace()
             val_Y_generator.apply_calibration()
+
 
     ##############
     # Graphs (X) #
@@ -85,7 +87,7 @@ if __name__ == '__main__':
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
-                              n_data=[N_TRAIN]*len(TRAIN_HP),
+                              n_data=N_TRAIN,
                               aperture_size=1.0,
                               stop_mean_std_early=False,
                               in_dir=IN_DIR),
@@ -95,7 +97,6 @@ if __name__ == '__main__':
                          is_train=True,
                          batch_size=BATCH_SIZE,
                          )
-
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'Y_{hp}' for hp in VAL_HP],
@@ -139,6 +140,7 @@ if __name__ == '__main__':
                             lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7, 'patience': 5, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)
+    print(len(trainer.train_dataset))
     trainer.train(n_epochs=200, eval_every=2)
     sys.exit()
     print(trainer)
