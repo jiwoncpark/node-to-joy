@@ -18,7 +18,7 @@ if __name__ == '__main__':
     CHECKPOINT_PATH = None
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
     SUB_TARGET_LOCAL = ['redshift']
-    CHECKPOINT_DIR = 'results/E0'
+    CHECKPOINT_DIR = 'results/E1'
     SKIP_RAYTRACING = True
 
     ##############
@@ -62,7 +62,6 @@ if __name__ == '__main__':
                                                 kappa_sampling_dir='kappa_sampling')  # no sampling
             val_Y_generator.parallel_raytrace()
             val_Y_generator.apply_calibration()
-
 
     ##############
     # Graphs (X) #
@@ -120,7 +119,6 @@ if __name__ == '__main__':
             print(b.y_local[:5, 0])
             break
 
-    trainer.configure_loss_fn('MSELoss')
     model_kwargs = dict(dim_in=trainer.X_dim,
                         dim_out_local=len(SUB_TARGET_LOCAL),
                         dim_out_global=len(SUB_TARGET),
@@ -130,14 +128,15 @@ if __name__ == '__main__':
                         dim_pre_aggr=50,
                         n_iter=5,
                         n_out_layers=5,
-                        global_flow=False
+                        global_flow=True
                         )
     trainer.configure_model('N2JNet', model_kwargs)
 
     trainer.configure_optim(early_stop_memory=50,
-                            weight_local_loss=0.01,
-                            optim_kwargs={'lr': 1e-3, 'weight_decay': 1.e-5},
-                            lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7, 'patience': 5, 'verbose': True})
+                            weight_local_loss=1.0,
+                            optim_kwargs={'lr': 1e-3, 'weight_decay': 1.e-4},
+                            lr_scheduler_kwargs={'factor': 0.5, 'min_lr': 1.e-7,
+                                                 'patience': 5, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)
     print(len(trainer.train_dataset))

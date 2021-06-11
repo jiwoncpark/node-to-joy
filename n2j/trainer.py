@@ -11,7 +11,6 @@ import torchvision.transforms as transforms
 from torch.utils.data.sampler import WeightedRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
-import n2j.losses as losses
 import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
 import matplotlib.pyplot as plt
@@ -136,11 +135,6 @@ class Trainer:
                                          num_workers=4,
                                          drop_last=True)
 
-    def configure_loss_fn(self, loss_type):
-        loss_obj = getattr(losses, loss_type)()
-        self.loss_obj = loss_obj
-        self.loss_type = self.loss_obj.__class__.__name__
-
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
         self.model_kwargs = model_kwargs
@@ -194,9 +188,7 @@ class Trainer:
                  )
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
-        model_fname = '{:s}_{:s}_{:s}.mdl'.format(self.loss_type,
-                                                  self.model_name,
-                                                  time_stamp)
+        model_fname = '{:s}_{:s}.mdl'.format(self.model_name, time_stamp)
         self.model_path = os.path.join(self.checkpoint_dir, model_fname)
         torch.save(state, self.model_path)
 
@@ -226,10 +218,20 @@ class Trainer:
             x, u = self.model(batch)
             loss_local, loss_global = self.model.loss(x, u, batch)
             loss = self.weight_local_loss*loss_local + loss_global
+            #nan_detected = False
+            #for p in self.model.parameters():
+            #    if p.grad is None:
+            #        continue  # next parameter
+            #    if torch.any(torch.isnan(p.grad)):
+            #        nan_detected = True
+            #        print(nan_detected)
+            #if nan_detected:
+            #    continue  # next batch
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.net_out_global.parameters(), 0.01)
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
-            self.logger.add_scalar('metrics/iter_loss', train_loss,
+            self.logger.add_scalar('metrics/iter_loss', loss.detach().cpu().item(),
                                    epoch_i*n_batches + i)
         return train_loss
 
@@ -280,8 +282,18 @@ class Trainer:
                 total_nll_global += (loss_global - total_nll_global)/(1.0+i)  # [1,]
             self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
             self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
-            self._log_kappa_recovery(epoch_i, x.cpu(), u.cpu(), batch.y.cpu())
+            if self.model.global_flow:
+                self._log_kappa_recovery_flow(epoch_i, x, u, batch.y)
+            else:
+                self._log_kappa_recovery(epoch_i, x.cpu(), u.cpu(), batch.y.cpu())
         return val_loss
+
+    def _log_kappa_recovery_flow(self, epoch_i, x, u, y):
+        with torch.no_grad():
+            u_out, log_det = self.model.net_out_global(u, y)
+            log_p = -u_out.pow(2).sum(1)/2
+            normed_log_p = log_p + log_det  # [batch_size,]
+        self.logger.add_histogram('kappa recovery', normed_log_p, epoch_i)
 
     def _log_kappa_recovery(self, epoch_i, x, u, y):
         # Convert into mu, sig over normed target
@@ -393,6 +405,4 @@ class Trainer:
             metadata.update(self.optim_kwargs)
         if hasattr(self, 'lr_scheduler_kwargs'):
             metadata.update(self.lr_scheduler_kwargs)
-        if hasattr(self, 'loss_obj'):
-            metadata.update({'loss_type': self.loss_type})
         return json.dumps(metadata)
