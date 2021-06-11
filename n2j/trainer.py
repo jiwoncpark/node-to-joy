@@ -122,7 +122,7 @@ class Trainer:
             self.train_loader = DataLoader(self.train_dataset,
                                            batch_size=self.batch_size,
                                            sampler=sampler,
-                                           num_workers=4,
+                                           num_workers=2,
                                            drop_last=True)
         else:
             self.val_dataset = dataset
@@ -132,7 +132,7 @@ class Trainer:
             self.val_loader = DataLoader(self.val_dataset,
                                          batch_size=self.batch_size,
                                          shuffle=False,
-                                         num_workers=4,
+                                         num_workers=2,
                                          drop_last=True)
 
     def configure_model(self, model_name, model_kwargs={}):
