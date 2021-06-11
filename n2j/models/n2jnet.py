@@ -8,15 +8,11 @@ from torch_geometric.nn import MetaLayer
 import torch
 from torch import nn
 from torch import optim
+from n2j.models.flow import Flow, MAF, Perm
 
-from nflows.flows.base import Flow
-from nflows.distributions.normal import ConditionalDiagonalNormal
-from nflows.transforms.base import CompositeTransform
-from nflows.transforms.autoregressive import MaskedAffineAutoregressiveTransform
-from nflows.transforms.permutations import ReversePermutation
-from nflows.nn.nets import ResidualNet
 
 __all__ = ['N2JNet']
+DEBUG = False
 
 
 class CustomMetaLayer(MetaLayer):
@@ -36,20 +32,6 @@ class CustomMetaLayer(MetaLayer):
         if self.global_model is not None:
             u = self.global_model(x, u, batch)
         return x, u
-
-
-def get_flow(dim_in, dim_hidden, dim_out, n_layers):
-    base_dist = ConditionalDiagonalNormal(shape=[dim_in],
-                                          context_encoder=nn.Linear(dim_out, dim_in*2))
-    transforms = []
-    for _ in range(n_layers):
-        transforms.append(ReversePermutation(features=dim_in))
-        transforms.append(MaskedAffineAutoregressiveTransform(features=dim_in,
-                                                              hidden_features=dim_hidden,
-                                                              context_features=dim_out))
-    transform = CompositeTransform(transforms)
-    flow = Flow(transform, base_dist)
-    return flow
 
 
 class N2JNet(Module):
@@ -91,8 +73,10 @@ class N2JNet(Module):
                                  ReLU(),
                                  Lin(self.dim_hidden, self.dim_out_local*2))
         if self.global_flow:
-            self.net_out_global = get_flow(self.dim_global, self.dim_hidden,
-                                           self.dim_out_global, self.n_out_layers)
+            self.net_out_global = Flow(*[[
+                                       MAF(self.dim_global, self.dim_out_global, hidden=dim_hidden),
+                                       Perm(self.dim_global)][i%2] for i in \
+                                       range(self.n_out_layers*2 + 1)])
         else:
             self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
                                       ReLU(),
@@ -111,6 +95,9 @@ class N2JNet(Module):
             x, u = meta(x=x, u=u, batch=batch)
         # x : [n_nodes, dim_local]
         # u : [batch_size, dim_global]
+        if DEBUG:
+            print("x is nan:", torch.any(torch.isnan(x)), x.mean())
+            print("u is nan:", torch.any(torch.isnan(u)), u.mean())
         x = self.net_out_local(x)  # [n_nodes, dim_local_out*2]
         if not self.global_flow:
             u = self.net_out_global(u)  # [batch_size, dim_global_out*2]
@@ -127,7 +114,13 @@ class N2JNet(Module):
     def global_loss(self, u, data):
         y = data.y
         if self.global_flow:
-            nlogp_global = - self.net_out_global.log_prob(u, context=y)  # [batch_size,]
+            u_out, log_det = self.net_out_global(u, y)
+            if DEBUG:
+                print("u_out", torch.any(torch.isnan(u_out)), u_out.mean())
+                print("log_det", torch.any(torch.isnan(log_det)), log_det.mean())
+            log_prob = -u_out.pow(2).sum(1)/2
+            normalized_log_prob = log_prob + log_det
+            nlogp_global = - normalized_log_prob  # [batch_size,]
         else:
             mu_global, logvar_global = torch.split(u, self.dim_out_global, dim=-1)
             precision_global = torch.exp(-logvar_global)
