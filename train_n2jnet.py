@@ -9,59 +9,16 @@ from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
 if __name__ == '__main__':
-    IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
-    TRAIN_HP = [10450, 10327, 10200, 10199]
+    IN_DIR = '/global/cscratch1/sd/jwp/n2j/data'  # where raw data lies
+    TRAIN_HP = [10450, 10327]
     VAL_HP = [10326]
-    N_TRAIN = [20000, 20000, 20000, 40000]
+    N_TRAIN = [50000, 50000]
     N_VAL = 100
     BATCH_SIZE = 1000  # min(N_TRAIN//5, 50)
     CHECKPOINT_PATH = None
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
-    SUB_TARGET_LOCAL = ['redshift']
+    SUB_TARGET_LOCAL = ['stellar_mass', 'redshift']
     CHECKPOINT_DIR = 'results/E1'
-    SKIP_RAYTRACING = True
-
-    ##############
-    # Labels (Y) #
-    ##############
-    # Explicitly sample kappas for ~1000 sightlines first (slow)
-    if False:
-        kappa_sampler = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                          out_dir='kappa_sampling',
-                                          fov=0.85,
-                                          healpix=10450,
-                                          n_sightlines=1000,  # keep this small
-                                          mass_cut=11.0,
-                                          n_kappa_samples=1000)
-        kappa_sampler.parallel_raytrace()
-        kappa_sampler.apply_calibration()
-    if not SKIP_RAYTRACING:
-        # Use this to infer the mean kappa contribution of new sightlines
-        for i, hp in enumerate(TRAIN_HP):
-            train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                                  out_dir=f'Y_{hp}',
-                                                  fov=0.85,
-                                                  healpix=hp,
-                                                  n_sightlines=N_TRAIN[i],  # many more LOS
-                                                  mass_cut=11.0,
-                                                  n_kappa_samples=0,
-                                                  kappa_sampling_dir='kappa_sampling')  # no sampling
-            train_Y_generator.parallel_raytrace()
-            train_Y_generator.apply_calibration()
-
-    if False:
-        for hp in VAL_HP:
-            # Use on a different healpix
-            val_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                                out_dir=f'Y_{hp}',
-                                                fov=0.85,
-                                                healpix=hp,
-                                                n_sightlines=N_VAL,  # many more LOS
-                                                mass_cut=11.0,
-                                                n_kappa_samples=0,
-                                                kappa_sampling_dir='kappa_sampling')  # no sampling
-            val_Y_generator.parallel_raytrace()
-            val_Y_generator.apply_calibration()
 
     ##############
     # Graphs (X) #
@@ -84,7 +41,7 @@ if __name__ == '__main__':
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
 
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
+                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=N_TRAIN,
                               aperture_size=1.0,
@@ -98,7 +55,7 @@ if __name__ == '__main__':
                          )
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'Y_{hp}' for hp in VAL_HP],
+                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data/cosmodc2_{hp}/Y_{hp}' for hp in VAL_HP],
                               healpixes=VAL_HP,
                               n_data=[N_VAL]*len(VAL_HP),
                               aperture_size=1.0,
