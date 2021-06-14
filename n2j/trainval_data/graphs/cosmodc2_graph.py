@@ -62,7 +62,7 @@ class CosmoDC2Graph(ConcatDataset):
         dummy_loader = DataLoader(self,
                                   batch_size=1000,
                                   shuffle=False,
-                                  num_workers=4,
+                                  num_workers=2,
                                   drop_last=False)
         print("Generating standardizing metadata...")
         for i, b in enumerate(dummy_loader):
@@ -74,6 +74,7 @@ class CosmoDC2Graph(ConcatDataset):
             Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
             y_class_counts += torch.bincount(b.y_class, minlength=4)
             y_class[i*1000:(i+1)*1000] = b.y_class
+            print(i)
             if self.stop_mean_std_early and i > 100:
                 break
         class_weight = torch.sum(y_class_counts)/y_class_counts

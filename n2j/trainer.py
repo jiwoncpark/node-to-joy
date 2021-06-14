@@ -69,7 +69,7 @@ class Trainer:
         self.sub_target = sub_target if sub_target else target
         self.Y_dim = len(self.sub_target)
         # Lobal y metadata
-        target_local = ['halo_mass', 'redshift']
+        target_local = ['halo_mass', 'stellar_mass', 'redshift']
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
         dataset = CosmoDC2Graph(**data_kwargs)
@@ -122,7 +122,7 @@ class Trainer:
             self.train_loader = DataLoader(self.train_dataset,
                                            batch_size=self.batch_size,
                                            sampler=sampler,
-                                           num_workers=4,
+                                           num_workers=2,
                                            drop_last=True)
         else:
             self.val_dataset = dataset
@@ -132,7 +132,7 @@ class Trainer:
             self.val_loader = DataLoader(self.val_dataset,
                                          batch_size=self.batch_size,
                                          shuffle=False,
-                                         num_workers=4,
+                                         num_workers=2,
                                          drop_last=True)
 
     def configure_model(self, model_name, model_kwargs={}):
