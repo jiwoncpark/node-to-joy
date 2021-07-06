@@ -118,7 +118,7 @@ class N2JNet(Module):
             if DEBUG:
                 print("u_out", torch.any(torch.isnan(u_out)), u_out.mean())
                 print("log_det", torch.any(torch.isnan(log_det)), log_det.mean())
-            log_prob = -u_out.pow(2).sum(1)/2
+            log_prob = -u_out.pow(2).sum(1)/2  # Standard normal base dist
             normalized_log_prob = log_prob + log_det
             nlogp_global = - normalized_log_prob  # [batch_size,]
         else:
