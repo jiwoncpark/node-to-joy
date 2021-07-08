@@ -1,3 +1,6 @@
+"""Class managing the model training
+
+"""
 import os
 import random
 import datetime
@@ -69,7 +72,7 @@ class Trainer:
         self.sub_target = sub_target if sub_target else target
         self.Y_dim = len(self.sub_target)
         # Lobal y metadata
-        target_local = ['halo_mass', 'redshift']
+        target_local = ['halo_mass', 'stellar_mass', 'redshift']
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
         dataset = CosmoDC2Graph(**data_kwargs)

@@ -5,63 +5,20 @@ import os
 import sys
 import cProfile
 import numpy as np
-from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
 if __name__ == '__main__':
     IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
-    TRAIN_HP = [10450, 10327, 10200, 10199]
-    VAL_HP = [10326]
-    N_TRAIN = [20000, 20000, 20000, 40000]
-    N_VAL = 100
+    TRAIN_HP = [10327]
+    VAL_HP = [10450]
+    N_TRAIN = [50000]
+    N_VAL = 1000
     BATCH_SIZE = 1000  # min(N_TRAIN//5, 50)
-    CHECKPOINT_PATH = 'results/E1/N2JNet_epoch=11_06-11-2021_16:35.mdl'
+    CHECKPOINT_PATH = "/home/jwp/stage/sl/n2j/results/E1/N2JNet_epoch=64_07-07-2021_15:54.mdl"
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
-    SUB_TARGET_LOCAL = ['redshift']
+    SUB_TARGET_LOCAL = ['stellar_mass', 'redshift']
     CHECKPOINT_DIR = 'results/E1'
     SKIP_RAYTRACING = True
-
-    ##############
-    # Labels (Y) #
-    ##############
-    # Explicitly sample kappas for ~1000 sightlines first (slow)
-    if False:
-        kappa_sampler = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                          out_dir='kappa_sampling',
-                                          fov=0.85,
-                                          healpix=10450,
-                                          n_sightlines=1000,  # keep this small
-                                          mass_cut=11.0,
-                                          n_kappa_samples=1000)
-        kappa_sampler.parallel_raytrace()
-        kappa_sampler.apply_calibration()
-    if not SKIP_RAYTRACING:
-        # Use this to infer the mean kappa contribution of new sightlines
-        for i, hp in enumerate(TRAIN_HP):
-            train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                                  out_dir=f'Y_{hp}',
-                                                  fov=0.85,
-                                                  healpix=hp,
-                                                  n_sightlines=N_TRAIN[i],  # many more LOS
-                                                  mass_cut=11.0,
-                                                  n_kappa_samples=0,
-                                                  kappa_sampling_dir='kappa_sampling')  # no sampling
-            train_Y_generator.parallel_raytrace()
-            train_Y_generator.apply_calibration()
-
-    if False:
-        for hp in VAL_HP:
-            # Use on a different healpix
-            val_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                                out_dir=f'Y_{hp}',
-                                                fov=0.85,
-                                                healpix=hp,
-                                                n_sightlines=N_VAL,  # many more LOS
-                                                mass_cut=11.0,
-                                                n_kappa_samples=0,
-                                                kappa_sampling_dir='kappa_sampling')  # no sampling
-            val_Y_generator.parallel_raytrace()
-            val_Y_generator.apply_calibration()
 
     ##############
     # Graphs (X) #
@@ -84,7 +41,7 @@ if __name__ == '__main__':
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
 
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'Y_{hp}' for hp in TRAIN_HP],
+                              raytracing_out_dirs=[os.path.join(IN_DIR, f'cosmodc2_{hp}/Y_{hp}') for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=N_TRAIN,
                               aperture_size=1.0,
@@ -98,7 +55,7 @@ if __name__ == '__main__':
                          )
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'Y_{hp}' for hp in VAL_HP],
+                              raytracing_out_dirs=[os.path.join(IN_DIR, f'cosmodc2_{hp}/Y_{hp}') for hp in VAL_HP],
                               healpixes=VAL_HP,
                               n_data=[N_VAL]*len(VAL_HP),
                               aperture_size=1.0,
@@ -128,7 +85,7 @@ if __name__ == '__main__':
                         dim_pre_aggr=50,
                         n_iter=5,
                         n_out_layers=5,
-                        global_flow=True
+                        global_flow=False
                         )
     trainer.configure_model('N2JNet', model_kwargs)
 
@@ -139,6 +96,12 @@ if __name__ == '__main__':
                                                  'patience': 5, 'verbose': True})
     if CHECKPOINT_PATH:
         trainer.load_state(CHECKPOINT_PATH)
+
+    def get_lr(gamma, optimizer):
+        return [group['lr'] * gamma for group in optimizer.param_groups]
+    #for param_group, lr in zip(trainer.optimizer.param_groups,
+    #                           get_lr(0.2, trainer.optimizer)):
+    #    param_group['lr'] = lr
     print(len(trainer.train_dataset))
     trainer.train(n_epochs=200, eval_every=2)
     sys.exit()
