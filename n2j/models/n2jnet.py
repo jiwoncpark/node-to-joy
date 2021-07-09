@@ -5,14 +5,29 @@ from torch.nn import (Module, ModuleList, ReLU, LayerNorm,
                       Sequential as Seq, Linear as Lin)
 from torch_scatter import scatter_add
 from torch_geometric.nn import MetaLayer
-import torch
 from torch import nn
-from torch import optim
+import torch.nn.functional as F
 from n2j.models.flow import Flow, MAF, Perm
 
 
 __all__ = ['N2JNet']
 DEBUG = False
+
+
+class MCDropout(nn.Dropout):
+    """1D dropout that stays on during training and testing
+
+    """
+    def forward(self, input: Tensor) -> Tensor:
+        return F.dropout(input, self.p, True, self.inplace)
+
+
+class MCDropout2d(nn.Dropout2d):
+    """2D dropout that stays on during training and testing
+
+    """
+    def forward(self, input: Tensor) -> Tensor:
+        return F.dropout2d(input, self.p, True, self.inplace)
 
 
 class CustomMetaLayer(MetaLayer):
@@ -37,7 +52,34 @@ class CustomMetaLayer(MetaLayer):
 class N2JNet(Module):
     def __init__(self, dim_in, dim_out_local, dim_out_global, dim_local, dim_global,
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
-                 global_flow=False, class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0])):
+                 global_flow=False,
+                 dropout=0.0,
+                 class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0])):
+        """Edgeless graph neural network modeling relationships among nodes
+        and between nodes and global
+
+        Parameters
+        ----------
+        dim_in : int
+            number of input features per node
+        dim_out_local : int
+            number of targets per node
+        dim_out_global : int
+            number of targets per graph
+        dim_local : int
+        dim_global : int
+        dim_hidden : int
+        dim_pre_aggr : int
+        n_iter : int
+        n_out_layers : int
+        global_flow : bool
+        dropout : float
+            fraction of weights to zero during training and testing,
+            for MC dropout. Default: 0.0
+        class_weight : torch.tensor
+
+
+        """
         super(N2JNet, self).__init__()
         self.dim_in = dim_in
         self.dim_out_local = dim_out_local
@@ -50,27 +92,34 @@ class N2JNet(Module):
         self.n_out_layers = n_out_layers
         self.global_flow = global_flow
         self.class_weight = class_weight
+        self.dropout = dropout
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_local),
                                  LayerNorm(self.dim_local))
         # MLPs for encoding local and global
         meta_layers = ModuleList()
         for i in range(self.n_iter):
-            node_model = NodeModel(self.dim_local, self.dim_global, self.dim_hidden)
+            node_model = NodeModel(self.dim_local, self.dim_global,
+                                   self.dim_hidden, self.dropout)
             global_model = GlobalModel(self.dim_local, self.dim_global,
-                                       self.dim_hidden, self.dim_pre_aggr)
+                                       self.dim_hidden, self.dim_pre_aggr,
+                                       self.dropout)
             meta = CustomMetaLayer(node_model=node_model, global_model=global_model)
             meta_layers.append(meta)
         self.meta_layers = meta_layers
         # Networks for local and global output
         self.net_out_local = Seq(Lin(self.dim_local, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_out_local*2))
         if self.global_flow:
             self.net_out_global = Flow(*[[
@@ -80,8 +129,10 @@ class N2JNet(Module):
         else:
             self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
                                       ReLU(),
+                                      MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_hidden),
                                       ReLU(),
+                                      MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_out_global*2))
 
     def forward(self, data):
@@ -140,19 +191,24 @@ class N2JNet(Module):
 
 
 class NodeModel(Module):
+    def __init__(self, dim_local, dim_global, dim_hidden, dropout):
+        """MLP governing the node representation
 
-    def __init__(self, dim_local, dim_global, dim_hidden):
+        """
         super(NodeModel, self).__init__()
         self.dim_local = dim_local
         self.dim_global = dim_global
         self.dim_hidden = dim_hidden
         self.dim_concat = self.dim_local + self.dim_global
+        self.dropout = dropout
         self.mlp = Seq(Lin(self.dim_concat, self.dim_hidden),
                        LayerNorm(self.dim_hidden),
                        ReLU(),
+                       MCDropout(self.dropout),
                        Lin(self.dim_hidden, self.dim_hidden),
                        LayerNorm(self.dim_hidden),
                        ReLU(),
+                       MCDropout(self.dropout),
                        Lin(self.dim_hidden, self.dim_local),
                        LayerNorm(self.dim_local))
 
@@ -165,26 +221,35 @@ class NodeModel(Module):
 
 
 class GlobalModel(Module):
-    def __init__(self, dim_local, dim_global, dim_hidden, dim_pre_aggr):
+    def __init__(self, dim_local, dim_global, dim_hidden, dim_pre_aggr,
+                 dropout):
+        """MLP governing the global representation
+
+        """
         super(GlobalModel, self).__init__()
         self.dim_local = dim_local
         self.dim_global = dim_global
         self.dim_hidden = dim_hidden
         self.dim_concat = self.dim_local + self.dim_global
         self.dim_pre_aggr = dim_pre_aggr
+        self.dropout = dropout
 
         # MLP prior to aggregating node encodings
         self.mlp_pre_aggr = Seq(Lin(self.dim_concat, self.dim_hidden),
                                 ReLU(),
+                                MCDropout(self.dropout),
                                 Lin(self.dim_hidden, self.dim_hidden),
                                 ReLU(),
+                                MCDropout(self.dropout),
                                 Lin(self.dim_hidden, self.dim_pre_aggr),
                                 LayerNorm(self.dim_pre_aggr))
         # MLP after aggregating node encodings
         self.mlp_post_aggr = Seq(Lin(self.dim_pre_aggr+self.dim_global, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_global),
                                  LayerNorm(self.dim_global))
 
