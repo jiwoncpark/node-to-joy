@@ -36,7 +36,8 @@ def is_decreasing(arr):
 class Trainer:
 
     def __init__(self, device_type, checkpoint_dir='trained_models', seed=123):
-        self.device = torch.device(device_type)
+        self.device_type = device_type
+        self.device = torch.device(self.device_type)
         self.seed = seed
         self.seed_everything()
         self.checkpoint_dir = checkpoint_dir

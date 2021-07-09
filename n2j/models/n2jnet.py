@@ -8,6 +8,7 @@ from torch_geometric.nn import MetaLayer
 from torch import nn
 import torch.nn.functional as F
 from n2j.models.flow import Flow, MAF, Perm
+from n2j.losses.gaussian_nll import DiagonalGaussianNLL
 
 
 __all__ = ['N2JNet']
@@ -54,7 +55,8 @@ class N2JNet(Module):
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
                  global_flow=False,
                  dropout=0.0,
-                 class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0])):
+                 class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0]),
+                 device_type='cuda'):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
 
@@ -93,6 +95,7 @@ class N2JNet(Module):
         self.global_flow = global_flow
         self.class_weight = class_weight
         self.dropout = dropout
+        self.device = torch.device(device_type)
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -134,6 +137,11 @@ class N2JNet(Module):
                                       ReLU(),
                                       MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_out_global*2))
+        # Losses
+        self.local_nll = DiagonalGaussianNLL(dim_out_local,
+                                             device=self.device)
+        self.global_nll = DiagonalGaussianNLL(dim_out_global,
+                                              device=self.device)
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
@@ -156,10 +164,7 @@ class N2JNet(Module):
 
     def local_loss(self, x, data):
         y_local = data.y_local  # [n_nodes, 2]
-        mu_local, logvar_local = torch.split(x, self.dim_out_local, dim=-1)
-        precision_local = torch.exp(-logvar_local)
-        nlogp_local = precision_local * (y_local - mu_local)**2.0 + logvar_local  # [n_nodes, 2]
-        nlogp_local = nlogp_local.mean(dim=-1)  # [n_nodes,]
+        nlogp_local = self.local_nll(x, y_local)  # [n_nodes,]
         return nlogp_local
 
     def global_loss(self, u, data):
@@ -173,10 +178,7 @@ class N2JNet(Module):
             normalized_log_prob = log_prob + log_det
             nlogp_global = - normalized_log_prob  # [batch_size,]
         else:
-            mu_global, logvar_global = torch.split(u, self.dim_out_global, dim=-1)
-            precision_global = torch.exp(-logvar_global)
-            nlogp_global = precision_global * (y - mu_global)**2.0 + logvar_global
-            nlogp_global = nlogp_global.mean(dim=-1)  # [batch_size,]
+            nlogp_global = self.global_nll(u, y)  # [batch_size,]
         return nlogp_global
 
     def loss(self, x, u, data):

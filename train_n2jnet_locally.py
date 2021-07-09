@@ -11,13 +11,13 @@ if __name__ == '__main__':
     IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
     TRAIN_HP = [10327]
     VAL_HP = [10450]
-    N_TRAIN = [20000]
+    N_TRAIN = [2000]
     N_VAL = 1000
     BATCH_SIZE = 1000  # min(N_TRAIN//5, 50)
     CHECKPOINT_PATH = None #"/home/jwp/stage/sl/n2j/results/E1/N2JNet_epoch=64_07-07-2021_15:54.mdl"
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
     SUB_TARGET_LOCAL = ['stellar_mass', 'redshift']
-    CHECKPOINT_DIR = 'results/E2'
+    CHECKPOINT_DIR = 'results/E3'
     SKIP_RAYTRACING = True
 
     ##############
@@ -86,7 +86,8 @@ if __name__ == '__main__':
                         n_iter=5,
                         n_out_layers=5,
                         dropout=0.04,
-                        global_flow=False
+                        global_flow=False,
+                        device_type=trainer.device_type
                         )
     trainer.configure_model('N2JNet', model_kwargs)
 
