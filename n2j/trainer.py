@@ -11,7 +11,7 @@ import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-from torch.utils.data.sampler import WeightedRandomSampler
+from torch.utils.data.sampler import WeightedRandomSampler, SubsetRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
@@ -62,7 +62,8 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
-                     sub_features=None, sub_target=None, sub_target_local=None):
+                     sub_features=None, sub_target=None, sub_target_local=None,
+                     rebin=False, num_workers=2):
         self.batch_size = batch_size
         # X metadata
         features = data_kwargs['features']
@@ -120,14 +121,34 @@ class Trainer:
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
-            self.class_weight = stats['class_weight']
-            sampler = WeightedRandomSampler(stats['y_weight'],
-                                            num_samples=len(self.train_dataset))
-            self.train_loader = DataLoader(self.train_dataset,
-                                           batch_size=self.batch_size,
-                                           sampler=sampler,
-                                           num_workers=2,
-                                           drop_last=True)
+            # Loading option 1: Subsample from a distribution
+            if data_kwargs['subsample_pdf_func'] is not None:
+                self.class_weight = None
+                sampler = SubsetRandomSampler(stats['subsample_idx'])
+                self.train_loader = DataLoader(self.train_dataset,
+                                               batch_size=self.batch_size,
+                                               sampler=sampler,
+                                               num_workers=num_workers,
+                                               drop_last=True)
+            else:
+                # Loading option 2: Over/undersample according to inverse frequency
+                if rebin:
+                    self.class_weight = stats['class_weight']
+                    sampler = WeightedRandomSampler(stats['y_weight'],
+                                                    num_samples=len(self.train_dataset))
+                    self.train_loader = DataLoader(self.train_dataset,
+                                                   batch_size=self.batch_size,
+                                                   sampler=sampler,
+                                                   num_workers=num_workers,
+                                                   drop_last=True)
+                # Loading option 3: No special sampling, just shuffle
+                else:
+                    self.class_weight = None
+                    self.train_loader = DataLoader(self.train_dataset,
+                                                   batch_size=self.batch_size,
+                                                   shuffle=True,
+                                                   num_workers=num_workers,
+                                                   drop_last=True)
         else:
             self.val_dataset = dataset
             self.val_dataset.transform_X = self.transform_X
@@ -136,7 +157,7 @@ class Trainer:
             self.val_loader = DataLoader(self.val_dataset,
                                          batch_size=self.batch_size,
                                          shuffle=False,
-                                         num_workers=2,
+                                         num_workers=num_workers,
                                          drop_last=True)
 
     def configure_model(self, model_name, model_kwargs={}):
@@ -144,8 +165,9 @@ class Trainer:
         self.model_kwargs = model_kwargs
         self.model = getattr(models, model_name)(**self.model_kwargs)
         self.model.to(self.device)
-        self.model.class_weight = self.class_weight.to(self.device)
-        print(self.model.class_weight)
+        if self.class_weight is not None:
+            self.model.class_weight = self.class_weight.to(self.device)
+        print("class weight: ", self.model.class_weight)
         n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"Number of params: {n_params}")
 

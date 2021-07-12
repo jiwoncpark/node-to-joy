@@ -55,7 +55,7 @@ class N2JNet(Module):
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
                  global_flow=False,
                  dropout=0.0,
-                 class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0]),
+                 class_weight=None,
                  device_type='cuda'):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
@@ -186,9 +186,10 @@ class N2JNet(Module):
         local_loss = scatter_add(local_loss, data.batch, dim=0)  # [batch_size,]
         global_loss = self.global_loss(u, data)  # [batch_size,]
         # Weight by inverse class number counts
-        y_weight = 1.0/self.class_weight[data.y_class].squeeze()
-        local_loss *= y_weight
-        global_loss *= y_weight
+        if self.class_weight is not None:
+            y_weight = 1.0/self.class_weight[data.y_class].squeeze()
+            local_loss *= y_weight
+            global_loss *= y_weight
         return local_loss.mean(), global_loss.mean()
 
 

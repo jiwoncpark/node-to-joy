@@ -9,12 +9,15 @@ import bisect
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
+import scipy.stats
 from tqdm import tqdm
 import torch
 from torch.utils.data.dataset import ConcatDataset
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
 from n2j.trainval_data.utils import coord_utils as cu
+from n2j.trainval_data.utils.running_stats import RunningStats
+from torch.utils.data.sampler import SubsetRandomSampler  # WeightedRandomSampler,
 
 
 class CosmoDC2Graph(ConcatDataset):
@@ -23,10 +26,12 @@ class CosmoDC2Graph(ConcatDataset):
 
     """
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
-                 n_data, features, stop_mean_std_early=False, n_cores=20):
+                 n_data, features, subsample_pdf_func=None,
+                 stop_mean_std_early=False, n_cores=20):
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
         self.n_cores = n_cores
+        self.subsample_pdf_func = subsample_pdf_func
         datasets = []
         Y_list = []
         for i in range(self.n_datasets):
@@ -51,37 +56,83 @@ class CosmoDC2Graph(ConcatDataset):
         """Statistics of the X, Y data used for standardizing
 
         """
-        X_mean = 0.0  # [1, sub_features]
-        X_std = 0.0
-        Y_mean = 0.0  # [1, sub_target]
-        Y_std = 0.0
-        Y_local_mean = 0.0  # [1, 2] where 2 is from [halo mass, redshift]
-        Y_local_std = 0.0
+        loader_dict = dict(X=lambda b: b.x,  # node features x
+                           Y_local=lambda b: b.y_local,  # node labels y_local
+                           Y=lambda b: b.y,)  # graph labels y
+        rs = RunningStats(loader_dict)
         y_class_counts = 0  # [n_classes,] where n_classes = number of bins
-        y_class = torch.zeros(len(self), dtype=torch.long)  # [n_train, 1]
+        y_class = torch.zeros(len(self), dtype=torch.long)  # [n_train,]
+        if self.subsample_pdf_func is None:
+            subsample_weight = None
+        else:
+            subsample_weight = np.zeros(len(self))  # [n_train,]
+        y_values_orig = np.zeros(len(self))
+        batch_size = 1000
         dummy_loader = DataLoader(self,
-                                  batch_size=1000,
+                                  batch_size=batch_size,
                                   shuffle=False,
                                   num_workers=2,
                                   drop_last=False)
         print("Generating standardizing metadata...")
         for i, b in enumerate(dummy_loader):
-            X_mean += (torch.mean(b.x, dim=0, keepdim=True) - X_mean)/(1.0+i)
-            X_std += (torch.std(b.x, dim=0, keepdim=True) - X_std)/(1.0+i)
-            Y_local_mean += (torch.mean(b.y_local, dim=0, keepdim=True) - Y_local_mean)/(1.0+i)
-            Y_local_std += (torch.std(b.y_local, dim=0, keepdim=True) - Y_local_std)/(1.0+i)
-            Y_mean += (torch.mean(b.y, dim=0, keepdim=True) - Y_mean)/(1.0+i)
-            Y_std += (torch.std(b.y, dim=0, keepdim=True) - Y_std)/(1.0+i)
+            # Update running stats for this new batch
+            rs.update(b, i)
+            # Update running bin count for kappa
             y_class_counts += torch.bincount(b.y_class, minlength=4)
-            y_class[i*1000:(i+1)*1000] = b.y_class
+            y_class[i*batch_size:(i+1)*batch_size] = b.y_class
+            # Log original kappa values
+            k_values_orig_batch = b.y[:, 0].cpu().numpy()
+            y_values_orig[i*batch_size:(i+1)*batch_size] = k_values_orig_batch
+            # Compute subsampling weights
+            if self.subsample_pdf_func is not None:
+                subsample_weight[i*batch_size:(i+1)*batch_size] = self.subsample_pdf_func(k_values_orig_batch)
             if self.stop_mean_std_early and i > 100:
                 break
-        class_weight = torch.sum(y_class_counts)/y_class_counts
-        stats = dict(X_mean=X_mean, X_std=X_std,
-                     Y_mean=Y_mean, Y_std=Y_std,
-                     Y_local_mean=Y_local_mean, Y_local_std=Y_local_std,
-                     y_weight=class_weight[y_class],
-                     class_weight=class_weight)
+        print("Y_mean without resampling: ", rs.stats['Y_mean'])
+        print("Y_std without resampling: ", rs.stats['Y_var']**0.5)
+        # Each bin is weighted by the inverse frequency
+        class_weight = torch.sum(y_class_counts)/y_class_counts  # [n_bins,]
+        y_weight = class_weight[y_class]  # [n_train]
+        subsample_idx = None
+        # Recompute mean, std if subsampling according to a distribution
+        if self.subsample_pdf_func is not None:
+            print("Re-generating standardizing metadata for subsampling dist...")
+            # Re-initialize mean, std
+            rs = RunningStats(loader_dict)
+            # Define SubsetRandomSampler to follow dist in subsample_pdf_func
+            print("Subsampling with replacement to follow provided subsample_pdf_func...")
+            # See https://github.com/pytorch/pytorch/issues/11201
+            torch.multiprocessing.set_sharing_strategy('file_system')
+            rng = np.random.default_rng(123)
+            kde = scipy.stats.gaussian_kde(y_values_orig, bw_method='scott')
+            p = subsample_weight/kde.pdf(y_values_orig)
+            p /= np.sum(p)
+            subsample_idx = rng.choice(np.arange(len(y_values_orig)),
+                                       p=p, replace=True, size=len(y_values_orig))
+            subsample_idx = subsample_idx.tolist()
+            sampler = SubsetRandomSampler(subsample_idx)
+            sampling_loader = DataLoader(self,
+                                         batch_size=batch_size,
+                                         sampler=sampler,
+                                         num_workers=2,
+                                         drop_last=False)
+            for i, b in enumerate(sampling_loader):
+                # Update running stats for this new batch
+                rs.update(b, i)
+                if self.stop_mean_std_early and i > 100:
+                    break
+            class_weight = None
+            y_weight = None
+            print("Y_mean with resampling: ", rs.stats['Y_mean'])
+            print("Y_std with resampling: ", rs.stats['Y_var']**0.5)
+        stats = dict(X_mean=rs.stats['X_mean'], X_std=rs.stats['X_var']**0.5,
+                     Y_mean=rs.stats['Y_mean'], Y_std=rs.stats['Y_var']**0.5,
+                     Y_local_mean=rs.stats['Y_local_mean'],
+                     Y_local_std=rs.stats['Y_local_var']**0.5,
+                     y_weight=y_weight,  # [n_train,] or None
+                     subsample_idx=subsample_idx,
+                     class_weight=class_weight,  # [n_classes,] or None
+                     )
         return stats
 
     def __getitem__(self, idx):
