@@ -282,7 +282,7 @@ class DiagonalGaussianNLL(BaseGaussianNLL):
         """
         self.Y_mean = mean
         self.Y_std = std
-        eps = torch.randn(self.batch_size, n_samples, self.Y_dim)
+        eps = torch.randn(self.batch_size, n_samples, self.Y_dim).to(mean.device)
         samples = eps*torch.exp(0.5*self.logvar.unsqueeze(1)) + self.mu.unsqueeze(1)
         samples = self.unwhiten_back(samples)
         samples = samples.data.cpu().numpy()
