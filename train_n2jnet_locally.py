@@ -5,16 +5,17 @@ import os
 import sys
 import cProfile
 import numpy as np
+from scipy import stats
 from n2j.trainer import Trainer
 
 if __name__ == '__main__':
     IN_DIR = '/home/jwp/stage/sl/n2j/n2j/data'  # where raw data lies
     TRAIN_HP = [10327]
     VAL_HP = [10450]
-    N_TRAIN = [2000]
+    N_TRAIN = [20000]
     N_VAL = 1000
     BATCH_SIZE = 1000  # min(N_TRAIN//5, 50)
-    CHECKPOINT_PATH = None #"/home/jwp/stage/sl/n2j/results/E1/N2JNet_epoch=64_07-07-2021_15:54.mdl"
+    CHECKPOINT_PATH = None  #"/home/jwp/stage/sl/n2j/results/E2/N2JNet_epoch=83_07-08-2021_21:00.mdl"
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
     SUB_TARGET_LOCAL = ['stellar_mass', 'redshift']
     CHECKPOINT_DIR = 'results/E3'
@@ -39,12 +40,13 @@ if __name__ == '__main__':
     # sub_features += ['ellipticity_1_true', 'ellipticity_2_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
-
+    norm_obj = stats.norm(loc=0.01, scale=0.03)
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[os.path.join(IN_DIR, f'cosmodc2_{hp}/Y_{hp}') for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=N_TRAIN,
                               aperture_size=1.0,
+                              subsample_pdf_func=norm_obj.pdf,
                               stop_mean_std_early=False,
                               in_dir=IN_DIR),
                          sub_features=sub_features,
@@ -52,6 +54,7 @@ if __name__ == '__main__':
                          sub_target_local=SUB_TARGET_LOCAL,
                          is_train=True,
                          batch_size=BATCH_SIZE,
+                         rebin=False,
                          )
     # FIXME: must be run after train
     trainer.load_dataset(dict(features=features,
@@ -66,9 +69,6 @@ if __name__ == '__main__':
                          is_train=False,
                          batch_size=N_VAL,  # FIXME: must be same as train
                          )
-
-    print(trainer.Y_local_mean, trainer.Y_local_std)
-    print(trainer.Y_mean, trainer.Y_std)
     if False:
         print(trainer.train_dataset[0].y_local)
         for b in trainer.train_loader:
