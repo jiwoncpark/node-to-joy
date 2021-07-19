@@ -64,7 +64,10 @@ class Trainer:
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
                      rebin=False, num_workers=2):
-        self.batch_size = batch_size
+        if is_train:
+            self.batch_size = batch_size
+        else:
+            self.val_batch_size = batch_size
         # X metadata
         features = data_kwargs['features']
         self.sub_features = sub_features if sub_features else features
@@ -126,7 +129,7 @@ class Trainer:
                 self.class_weight = None
                 sampler = SubsetRandomSampler(stats['subsample_idx'])
                 self.train_loader = DataLoader(self.train_dataset,
-                                               batch_size=self.batch_size,
+                                               batch_size=batch_size,
                                                sampler=sampler,
                                                num_workers=num_workers,
                                                drop_last=True)
@@ -137,7 +140,7 @@ class Trainer:
                     sampler = WeightedRandomSampler(stats['y_weight'],
                                                     num_samples=len(self.train_dataset))
                     self.train_loader = DataLoader(self.train_dataset,
-                                                   batch_size=self.batch_size,
+                                                   batch_size=batch_size,
                                                    sampler=sampler,
                                                    num_workers=num_workers,
                                                    drop_last=True)
@@ -145,7 +148,7 @@ class Trainer:
                 else:
                     self.class_weight = None
                     self.train_loader = DataLoader(self.train_dataset,
-                                                   batch_size=self.batch_size,
+                                                   batch_size=batch_size,
                                                    shuffle=True,
                                                    num_workers=num_workers,
                                                    drop_last=True)
@@ -155,7 +158,7 @@ class Trainer:
             self.val_dataset.transform_Y = self.transform_Y
             self.val_dataset.transform_Y_local = self.transform_Y_local
             self.val_loader = DataLoader(self.val_dataset,
-                                         batch_size=self.batch_size,
+                                         batch_size=batch_size,
                                          shuffle=False,
                                          num_workers=num_workers,
                                          drop_last=True)
@@ -345,80 +348,6 @@ class Trainer:
         ax.set_ylabel(r"Pred kappa")
         self.logger.add_figure('kappa recovery', fig, global_step=epoch_i)
         plt.close('all')
-
-    def eval_posterior(self, epoch_i, n_samples=200, n_mc_dropout=20,
-                       on_train=False):
-        # Fetch precomputed Y_mean, Y_std to de-standardize samples
-        Y_mean = self.Y_mean.to(self.device)
-        Y_std = self.Y_std.to(self.device)
-        if on_train:
-            loader = self.train_loader
-            prefix = 'train'
-            n_mc_dropout = 1
-            n_samples = 1
-        else:
-            loader = self.val_loader
-            prefix = 'val'
-        B = self.batch_size  # for convenience
-        n_data = len(loader)*B
-        self.model.eval()
-        with torch.no_grad():
-            samples = np.empty([n_data,
-                               n_mc_dropout,
-                               n_samples,
-                               self.Y_dim])
-            y_unnormed = np.empty([n_data, self.Y_dim])
-            edge_index_list = []
-            w_list = []
-            for i, batch in enumerate(loader):
-                batch = batch.to(self.device)
-                # Get ground truth
-                y_unnormed[i*B: (i+1)*B, :] = (batch.y*Y_std + Y_mean).cpu().numpy()
-                for mc_iter in range(n_mc_dropout):
-                    out, (edge_index, w) = self.model(batch)
-                    # Get pred samples
-                    self.loss_obj.set_trained_pred(out)
-                    if 'Double' in self.loss_type:
-                        self.logger.add_histogram('{:s}/w2'.format(prefix),
-                                                  self.loss_obj.w2, epoch_i)
-                        mc_samples = self.loss_obj.sample(Y_mean,
-                                                          Y_std,
-                                                          n_samples,
-                                                          sample_seed=self.seed)
-                    samples[i*B: (i+1)*B, mc_iter, :, :] = mc_samples
-                edge_index_list.append(edge_index.detach().cpu().numpy())
-                w_list.append(w.detach().cpu().numpy())
-        samples = samples.transpose(0, 3, 1, 2).reshape([n_data, self.Y_dim, -1])
-        self.log_metrics(epoch_i, samples, y_unnormed, prefix)
-        summary = dict(samples=samples,
-                       y_val=y_unnormed,
-                       batch=batch.batch.detach().cpu().numpy(),
-                       edge_index=np.concatenate(edge_index_list, axis=1),
-                       w=np.concatenate(w_list, axis=0)
-                       )
-        return summary
-
-    def log_metrics(self, epoch_i, samples, y_val, prefix):
-        # Log metrics on pred
-        mean_pred = np.mean(samples, axis=-1)  # [batch_size, Y_dim]
-        std_pred = np.std(samples, axis=-1)
-        prec = np.abs(std_pred)
-        err = np.abs((mean_pred - y_val))
-        z = ((mean_pred - y_val)/(std_pred + 1.e-7))
-        for i, name in enumerate(self.sub_target):
-            self.logger.add_scalars('{:s}/metrics/{:s}'.format(prefix, name),
-                                    dict(med_ae=np.median(err, axis=0)[i],
-                                         med_prec=np.median(prec, axis=0)[i]),
-                                    epoch_i)
-            self.logger.add_histogram('{:s}/prec/{:s}'.format(prefix, name),
-                                      prec[:, i],
-                                      epoch_i)
-            self.logger.add_histogram('{:s}/MAE/{:s}'.format(prefix, name),
-                                      err[:, i],
-                                      epoch_i)
-            self.logger.add_histogram('{:s}/z/{:s}'.format(prefix, name),
-                                      z[:, i],
-                                      epoch_i)
 
     def __repr__(self):
         keys = ['X_dim', 'sub_features', 'sub_target', 'Y_dim', 'out_dim']
