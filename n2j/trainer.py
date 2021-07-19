@@ -64,6 +64,14 @@ class Trainer:
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
                      rebin=False, num_workers=2):
+        """Load dataset and dataloader for training or validation
+
+        Note
+        ----
+        Should be called for training data first, to set the normalizing stats
+        used for both training and validation!
+
+        """
         if is_train:
             self.batch_size = batch_size
         else:
@@ -264,7 +272,7 @@ class Trainer:
                                    epoch_i*n_batches + i)
         return train_loss
 
-    def train(self, n_epochs, eval_every=1, eval_on_train=False, sample_kwargs={}):
+    def train(self, n_epochs, sample_kwargs={}):
         self.model.train()
         # Training loop
         self.n_epochs = n_epochs
@@ -276,11 +284,6 @@ class Trainer:
             self.logger.add_scalars('metrics/loss',
                                     dict(train=train_loss_i, val=val_loss_i),
                                     epoch_i)
-            if False:
-                if (epoch_i+1) % eval_every == 0:
-                    if eval_on_train:
-                        self.eval_posterior(epoch_i, **sample_kwargs, on_train=True)
-                    self.eval_posterior(epoch_i, **sample_kwargs, on_train=False)
             self.epoch = epoch_i
             # Stop early if val loss doesn't decrease for 10 consecutive epochs
             self.early_stop_crit.append(val_loss_i)
@@ -311,6 +314,7 @@ class Trainer:
                 total_nll_global += (loss_global - total_nll_global)/(1.0+i)  # [1,]
             self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
             self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
+            # Make plots on the last batch
             if self.model.global_flow:
                 self._log_kappa_recovery_flow(epoch_i, x, u, batch.y)
             else:
