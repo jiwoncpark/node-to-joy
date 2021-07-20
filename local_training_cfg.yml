@@ -1,0 +1,63 @@
+# Dataloader kwargs
+data:
+  train_dist_name: 'norm'
+  train_dist_kwargs:
+    loc: 0.01
+    scale: 0.03
+  in_dir: '/home/jwp/stage/sl/n2j/n2j/data'
+  train_hp: [10327]
+  val_hp: [10450]
+  n_train: [20000]
+  n_val: [1000]
+  batch_size: 1000
+  val_batch_size: 1000
+  num_workers: 4
+  # Global (graph-level) target; final_gamma1, final_gamm2 also available
+  sub_target: ['final_kappa']
+  # Local (node-level) target
+  sub_target_local: ['stellar_mass', 'redshift']
+  # Features available; do not modify (determined at data generation time)
+  features: ['galaxy_id', 'ra', 'dec', 'redshift',
+              'ra_true', 'dec_true', 'redshift_true',
+              'bulge_to_total_ratio_i',
+              'ellipticity_1_true', 'ellipticity_2_true',
+              'ellipticity_1_bulge_true', 'ellipticity_1_disk_true',
+              'ellipticity_2_bulge_true', 'ellipticity_2_disk_true',
+              'shear1', 'shear2', 'convergence',
+              'size_bulge_true', 'size_disk_true', 'size_true',
+              'mag_u_lsst', 'mag_g_lsst', 'mag_r_lsst',
+              'mag_i_lsst', 'mag_z_lsst', 'mag_Y_lsst']
+  # Features to use as input
+  sub_features: ['ra_true', 'dec_true',
+                  'mag_u_lsst', 'mag_g_lsst', 'mag_r_lsst',
+                  'mag_i_lsst', 'mag_z_lsst', 'mag_Y_lsst']
+# Optimizer kwargs
+optimization:
+  early_stop_memory: 50
+  weight_local_loss: 1.0
+  optim_kwargs:
+    lr: 0.001
+    weight_decay: 0.0001
+  lr_scheduler_kwargs:
+    patience: 5
+    factor: 0.5
+    min_lr: 0.0000001
+    verbose: True
+# Model kwargs
+model:
+  dim_local: 50
+  dim_global: 50
+  dim_hidden: 50
+  dim_pre_aggr: 50
+  n_iter: 5
+  n_out_layers: 5
+  dropout: 0.04
+  global_flow: False
+# Trainer attributes
+trainer:
+  device_type: 'cuda'
+  checkpoint_dir: results/E1
+  seed: 1028
+# If you want to resume training from a checkpoint
+resume_from:
+  checkpoint_path: null
