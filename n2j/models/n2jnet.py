@@ -55,8 +55,7 @@ class N2JNet(Module):
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
                  global_flow=False,
                  dropout=0.0,
-                 class_weight=None,
-                 device_type='cuda'):
+                 class_weight=None):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
 
@@ -95,7 +94,6 @@ class N2JNet(Module):
         self.global_flow = global_flow
         self.class_weight = class_weight
         self.dropout = dropout
-        self.device = torch.device(device_type)
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -138,10 +136,8 @@ class N2JNet(Module):
                                       MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_out_global*2))
         # Losses
-        self.local_nll = DiagonalGaussianNLL(dim_out_local,
-                                             device=self.device)
-        self.global_nll = DiagonalGaussianNLL(dim_out_global,
-                                              device=self.device)
+        self.local_nll = DiagonalGaussianNLL(dim_out_local)
+        self.global_nll = DiagonalGaussianNLL(dim_out_global)
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
