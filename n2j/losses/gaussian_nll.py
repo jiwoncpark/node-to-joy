@@ -20,17 +20,15 @@ class BaseGaussianNLL(ABC):
     matrix inherit from this class.
 
     """
-    def __init__(self, Y_dim, device):
+    def __init__(self, Y_dim):
         """
         Parameters
         ----------
         Y_dim : int
             number of parameters to predict
-        device : torch.device object
 
         """
         self.Y_dim = Y_dim
-        self.device = device
         self.sigmoid = torch.nn.Sigmoid()
         self.logsigmoid = torch.nn.LogSigmoid()
 
@@ -141,7 +139,7 @@ class BaseGaussianNLL(ABC):
         """
         batch_size, _ = target.shape
         tril = torch.zeros([batch_size, self.Y_dim, self.Y_dim],
-                           device=self.device, dtype=None)
+                           dtype=None).to(target.device)
         tril[:, self.tril_idx[0], self.tril_idx[1]] = tril_elements
         log_diag_tril = torch.diagonal(tril, offset=0, dim1=1, dim2=2)  # [batch_size, Y_dim]
         logdet_term = -torch.sum(log_diag_tril, dim=1)  # [batch_size,]
@@ -221,10 +219,8 @@ class BaseGaussianNLL(ABC):
         np.array of shape `[self.batch_size, n_samples, self.Y_dim]`
             samples
         """
-        eps = torch.randn([self.batch_size, self.Y_dim, n_samples],
-                          device=self.device)  # [B, Y, N]
-        tril = torch.zeros([self.batch_size, self.Y_dim, self.Y_dim],
-                           device=self.device, dtype=None)  # [B, Y, Y]
+        eps = torch.randn([self.batch_size, self.Y_dim, n_samples]).to(mu.device)  # [B, Y, N]
+        tril = torch.zeros([self.batch_size, self.Y_dim, self.Y_dim]).to(mu.device)  # [B, Y, Y]
         tril[:, self.tril_idx[0], self.tril_idx[1]] = tril_elements
         log_diag_tril = torch.diagonal(tril, offset=0, dim1=1, dim2=2)
         tril[:, torch.eye(self.Y_dim, dtype=bool)] = torch.exp(log_diag_tril)
@@ -249,8 +245,8 @@ class DiagonalGaussianNLL(BaseGaussianNLL):
     """
     posterior_name = 'DiagonalGaussianBNNPosterior'
 
-    def __init__(self, Y_dim, device):
-        super(DiagonalGaussianNLL, self).__init__(Y_dim, device)
+    def __init__(self, Y_dim):
+        super(DiagonalGaussianNLL, self).__init__(Y_dim)
         self.out_dim = Y_dim*2
 
     def __call__(self, pred, target):
@@ -298,10 +294,10 @@ class FullRankGaussianNLL(BaseGaussianNLL):
     """
     posterior_name = 'FullRankGaussianBNNPosterior'
 
-    def __init__(self, Y_dim, device):
-        super(FullRankGaussianNLL, self).__init__(Y_dim, device)
-        self.tril_idx = torch.tril_indices(self.Y_dim, self.Y_dim, offset=0,
-                                           device=device)  # lower-triang idx
+    def __init__(self, Y_dim):
+        super(FullRankGaussianNLL, self).__init__(Y_dim)
+        self.tril_idx = torch.tril_indices(self.Y_dim, self.Y_dim,
+                                           offset=0)  # lower-triang idx
         self.tril_len = len(self.tril_idx[0])
         self.out_dim = self.Y_dim + self.Y_dim*(self.Y_dim + 1)//2
 
@@ -334,10 +330,10 @@ class DoubleGaussianNLL(BaseGaussianNLL):
     """
     posterior_name = 'DoubleGaussianBNNPosterior'
 
-    def __init__(self, Y_dim, device):
-        super(DoubleGaussianNLL, self).__init__(Y_dim, device)
-        self.tril_idx = torch.tril_indices(self.Y_dim, self.Y_dim, offset=0,
-                                           device=device)  # lower-triang idx
+    def __init__(self, Y_dim):
+        super(DoubleGaussianNLL, self).__init__(Y_dim)
+        self.tril_idx = torch.tril_indices(self.Y_dim, self.Y_dim,
+                                           offset=0)  # lower-triang idx
         self.tril_len = len(self.tril_idx[0])
         self.out_dim = self.Y_dim**2 + 3*self.Y_dim + 1
 
@@ -375,10 +371,9 @@ class DoubleGaussianNLL(BaseGaussianNLL):
         """
         self.Y_mean = mean
         self.Y_std = std
-        samples = torch.zeros([self.batch_size, n_samples, self.Y_dim],
-                              device=self.device)
+        samples = torch.zeros([self.batch_size, n_samples, self.Y_dim]).to(mean.device)
         # Determine first vs. second Gaussian
-        unif2 = torch.rand(self.batch_size, n_samples, device=self.device)
+        unif2 = torch.rand(self.batch_size, n_samples).to(mean.device)
         second_gaussian = (self.w2 > unif2)
         # Sample from second Gaussian
         samples2 = self.sample_full_rank(n_samples, self.mu2,
