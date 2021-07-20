@@ -4,10 +4,10 @@
 import os
 from scipy import stats
 from n2j.trainer import Trainer
-from n2j.train_utils import get_train_cfg
+from n2j.config_utils import get_config
 
 if __name__ == '__main__':
-    cfg = get_train_cfg()
+    cfg = get_config()
     trainer = Trainer(**cfg['trainer'])
     norm_obj = getattr(stats, cfg['data']['train_dist_name'])(**cfg['data']['train_dist_kwargs'])
     train_raytracing = [os.path.join(cfg['data']['in_dir'],

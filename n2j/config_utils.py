@@ -3,7 +3,7 @@ import argparse
 import yaml
 
 
-def get_train_cfg_modular(main_args):
+def get_config_modular(main_args):
     parser = argparse.ArgumentParser()
     parser.add_argument('config_file',
                         type=str,
@@ -17,5 +17,5 @@ def get_train_cfg_modular(main_args):
     return cfg
 
 
-def get_train_cfg():
-    return get_train_cfg_modular(sys.argv[1:])
+def get_config():
+    return get_config_modular(sys.argv[1:])
