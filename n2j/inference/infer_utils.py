@@ -39,7 +39,8 @@ def run_mcmc(log_prob, log_prob_kwargs, p0, n_run, n_burn, chain_path,
              run_name='mcmc',
              n_walkers=100,
              plot_chain=True,
-             clear=False):
+             clear=False,
+             n_cores=None):
     """Run MCMC sampling
 
     Parameters
@@ -53,12 +54,12 @@ def run_mcmc(log_prob, log_prob_kwargs, p0, n_run, n_burn, chain_path,
 
     """
     n_dim = p0.shape[1]
-    n_cpu = cpu_count()
+    n_cores = cpu_count() - 2 if n_cores is None else n_cores
     # Set up the backend
     backend = emcee.backends.HDFBackend(chain_path, name=run_name)
     if clear:
         backend.reset(n_walkers, n_dim)  # clear it in case the file already exists
-    with Pool(n_cpu - 2) as pool:
+    with Pool(n_cores) as pool:
         sampler = emcee.EnsembleSampler(n_walkers, n_dim, log_prob,
                                         kwargs=log_prob_kwargs,
                                         pool=pool, backend=backend)
@@ -70,10 +71,11 @@ def run_mcmc(log_prob, log_prob_kwargs, p0, n_run, n_burn, chain_path,
             sampler.run_mcmc(None, n_run, progress=True)
     if plot_chain:
         samples = sampler.get_chain(flat=True)
-        get_chain_plot(samples)
+        get_chain_plot(samples, os.path.join(os.path.dirname(chain_path),
+                                             'mcmc_chain.png'))
 
 
-def get_chain_plot(samples):
+def get_chain_plot(samples, out_path='mcmc_chain.png'):
     """Plot MCMC chain
 
     Note
@@ -91,7 +93,7 @@ def get_chain_plot(samples):
         ax.set_ylabel(labels[i])
         ax.yaxis.set_label_coords(-0.1, 0.5)
     axes[-1].set_xlabel("step number")
-    fig.savefig('mcmc_chain.png')
+    fig.savefig(out_path)
 
 
 def get_log_p_k_given_omega_int(k_train, k_bnn):
