@@ -67,8 +67,10 @@ class InferenceManager:
         """Load training and test datasets
 
         """
-        # TODO: val should be test
-        self.batch_size = batch_size
+        if is_train:
+            self.batch_size = batch_size
+        else:
+            self.test_batch_size = batch_size
         self.num_workers = num_workers
         # X metadata
         features = data_kwargs['features']
@@ -155,43 +157,43 @@ class InferenceManager:
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
         else:
-            self.val_dataset = dataset
-            self.val_dataset.transform_X = self.transform_X
-            self.val_dataset.transform_Y = self.transform_Y
-            self.val_dataset.transform_Y_local = self.transform_Y_local
-            self.val_loader = DataLoader(self.val_dataset,
-                                         batch_size=self.batch_size,
-                                         shuffle=False,
-                                         num_workers=self.num_workers,
-                                         drop_last=True)
+            self.test_dataset = dataset
+            self.test_dataset.transform_X = self.transform_X
+            self.test_dataset.transform_Y = self.transform_Y
+            self.test_dataset.transform_Y_local = self.transform_Y_local
+            self.test_loader = DataLoader(self.test_dataset,
+                                          batch_size=self.test_batch_size,
+                                          shuffle=False,
+                                          num_workers=self.num_workers,
+                                          drop_last=True)
 
-    def reset_val_dataset(self, subsample_pdf_func, n_val):
-        """Reset val loader to follow the specified distribution
+    def reset_test_dataset(self, subsample_pdf_func, n_test):
+        """Reset test loader to follow the specified distribution
 
         """
         rng = np.random.default_rng(123)
-        y_val = self.get_true_kappa(is_train=False, add_suffix='orig').squeeze()
+        y_test = self.get_true_kappa(is_train=False, add_suffix='orig').squeeze()
         subsample_idx_path = os.path.join(self.out_dir, 'subsample_idx.npy')
         if os.path.exists(subsample_idx_path):
             subsample_idx = np.load(subsample_idx_path).tolist()
         else:
             print("Evaluating the resampling density...")
-            print(f"on test set of size {len(y_val)}")
-            kde = scipy.stats.gaussian_kde(y_val, bw_method='scott')
-            p = subsample_pdf_func(y_val)/kde.pdf(y_val)
+            print(f"on test set of size {len(y_test)}")
+            kde = scipy.stats.gaussian_kde(y_test, bw_method='scott')
+            p = subsample_pdf_func(y_test)/kde.pdf(y_test)
             p /= np.sum(p)
-            subsample_idx = rng.choice(np.arange(len(y_val)),
-                                       p=p, replace=False, size=n_val)
+            subsample_idx = rng.choice(np.arange(len(y_test)),
+                                       p=p, replace=False, size=n_test)
             subsample_idx = subsample_idx.tolist()
             np.save(subsample_idx_path, subsample_idx)
-        val_subset = torch.utils.data.Subset(self.val_dataset, subsample_idx)
-        self.val_dataset = val_subset
-        self.val_loader = DataLoader(self.val_dataset,
-                                     batch_size=self.batch_size,
-                                     shuffle=False,
-                                     num_workers=self.num_workers,
-                                     drop_last=False)
-        print(f"The test dataset now has size {n_val}")
+        test_subset = torch.utils.data.Subset(self.test_dataset, subsample_idx)
+        self.test_dataset = test_subset
+        self.test_loader = DataLoader(self.test_dataset,
+                                      batch_size=self.batch_size,
+                                      shuffle=False,
+                                      num_workers=self.num_workers,
+                                      drop_last=False)
+        print(f"The test dataset now has size {n_test}")
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
@@ -245,11 +247,11 @@ class InferenceManager:
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
-        n_test = len(self.val_dataset)
+        n_test = len(self.test_dataset)
         self.model.eval()
         with torch.no_grad():
             samples = np.empty([n_test, n_mc_dropout, n_samples, self.Y_dim])
-            for i, batch in enumerate(self.val_loader):
+            for i, batch in enumerate(self.test_loader):
                 batch = batch.to(self.device)
                 for mc_iter in range(n_mc_dropout):
                     x, u = self.model(batch)
@@ -264,14 +266,22 @@ class InferenceManager:
         np.save(path, samples)
         return samples
 
+    def get_summary_metrics(self):
+        """Calculate summarizing metrics
+
+        """
+        pass
+
     def get_true_kappa(self, is_train, add_suffix='', save=True):
-        # Init k_train
+        # Decide which dataset we're collecting kappa labels for
         if is_train:
             loader = self.train_loader
             suffix = 'train'
+            n_data = len(self.train_dataset)
         else:
-            loader = self.val_loader
-            suffix = 'val'
+            loader = self.test_loader
+            suffix = 'test'
+            n_data = len(self.test_dataset)
         path = os.path.join(self.out_dir, f'k_{suffix}{add_suffix}.npy')
         if os.path.exists(path):
             true_kappa = np.load(path)
@@ -279,9 +289,10 @@ class InferenceManager:
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
-        n_test = len(self.val_dataset)
-        true_kappa = np.empty([n_test, self.Y_dim])
+        # Init empty array
+        true_kappa = np.empty([n_data, self.Y_dim])
         with torch.no_grad():
+            # Populate `true_kappa` by batches
             for i, batch in enumerate(loader):
                 batch = batch.to(self.device)
                 B = batch.y.shape[0]  # [this batch size]
