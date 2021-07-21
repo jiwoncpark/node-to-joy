@@ -59,7 +59,7 @@ model:
 # Trainer attributes
 trainer:
   device_type: 'cuda'
-  checkpoint_dir: results/E1
+  checkpoint_dir: '/home/jwp/stage/sl/n2j/results/E1'
   seed: 1028
 # If you want to resume training from a checkpoint
 resume_from:
@@ -67,4 +67,25 @@ resume_from:
 #############
 # Inference #
 #############
-
+inference_manager:
+  device_type: 'cuda'
+  out_dir: '/home/jwp/stage/sl/n2j/inference_results/E1'
+  seed: 1028
+test_data:
+  test_hp: [10326]
+  n_test_pre_subsample: [50000]
+  n_test: [100]
+  batch_size: 100
+  dist_name: 'norm'
+  dist_kwargs:
+    loc: 0.04
+    scale: 0.005
+checkpoint_path: "/home/jwp/stage/sl/n2j/results/E3/N2JNet_epoch=198_07-12-2021_06:36.mdl"
+run_mcmc: True
+extra_mcmc_kwargs:
+  n_run: 200
+  n_burn: 1000
+  n_walkers: 20
+  plot_chain: True
+  clear: True
+  n_cores: 4
