@@ -1,3 +1,6 @@
+############
+# Training #
+############
 # Dataloader kwargs
 data:
   train_dist_name: 'norm'
@@ -9,7 +12,7 @@ data:
   val_hp: [10450]
   n_train: [20000]
   n_val: [1000]
-  batch_size: 2000
+  batch_size: 1000
   val_batch_size: 1000
   num_workers: 8
   # Global (graph-level) target; final_gamma1, final_gamm2 also available
@@ -61,3 +64,28 @@ trainer:
 # If you want to resume training from a checkpoint
 resume_from:
   checkpoint_path: null
+#############
+# Inference #
+#############
+inference_manager:
+  device_type: 'cuda'
+  out_dir: 'inference_results/E1'
+  seed: 1028
+test_data:
+  test_hp: [10326]
+  n_test_pre_subsample: [50000]
+  n_test: [100]
+  dist_name: 'norm'
+  dist_kwargs:
+    loc: 0.04
+    scale: 0.005
+# Replace with your own
+checkpoint_path: "/home/jwp/stage/sl/n2j/results/E3/N2JNet_epoch=198_07-12-2021_06:36.mdl"
+run_mcmc: True
+extra_mcmc_kwargs:
+  n_run: 200
+  n_burn: 1000
+  n_walkers: 20
+  plot_chain: True
+  clear: True
+  n_cores: 4
