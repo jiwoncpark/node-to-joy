@@ -5,7 +5,6 @@
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
-import dill
 import numpy as np
 from scipy import stats, special
 import emcee
