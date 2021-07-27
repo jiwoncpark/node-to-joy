@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import healpy as hp
-from n2j.trainval_data import coord_utils as cu
+from n2j.trainval_data.utils import coord_utils as cu
 from scipy import stats
 
 
