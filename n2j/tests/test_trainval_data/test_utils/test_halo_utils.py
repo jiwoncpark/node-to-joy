@@ -6,7 +6,7 @@ import os
 import unittest
 import shutil
 import numpy as np
-from n2j.trainval_data import halo_utils as hu
+from n2j.trainval_data.utils import halo_utils as hu
 
 
 class TestHaloUtils(unittest.TestCase):
@@ -36,11 +36,13 @@ class TestHaloUtils(unittest.TestCase):
         c200_at_stellar_mass = hu.get_concentration(1.0, 1.0, m=-0.10,
                                                     A=3.44,
                                                     trans_M_ratio=430.49,
-                                                    c_0=c_0)
+                                                    c_0=c_0,
+                                                    add_noise=False)
         c200_at_high_halo_mass = hu.get_concentration(10.0**5, 1.0, m=-0.10,
                                                       A=3.44,
                                                       trans_M_ratio=430.49,
-                                                      c_0=c_0)
+                                                      c_0=c_0,
+                                                      add_noise=False)
         np.testing.assert_almost_equal(c200_at_stellar_mass, 6.060380052400085,
                                        err_msg='halo mass at stellar mass')
         np.testing.assert_almost_equal(c200_at_high_halo_mass, c_0, decimal=2,

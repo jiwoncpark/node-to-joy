@@ -9,3 +9,6 @@ dynesty
 tqdm
 mpmath
 healpy
+emcee
+pyyaml
+corner
