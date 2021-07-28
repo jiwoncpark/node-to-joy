@@ -13,8 +13,7 @@ class TestTransformUtils(unittest.TestCase):
         """Set global defaults for tests
 
         """
-        cls.mags = np.array([[24, 24, 24, 24, 24, 24]])
-        cls.es = ErrorSimulator(cls.mags)
+        cls.es = ErrorSimulator()
 
     def test_basic(self):
         """Verify correspondence with same analytic function in Collab notebook
@@ -24,7 +23,8 @@ class TestTransformUtils(unittest.TestCase):
         sigma_u = self.es.calculate_photo_err('u', mag)
         np.testing.assert_equal(sigma_u, 0.033833253781615086)
 
-        sigmas = self.es.get_sigmas()
+        mags = np.array([[24, 24, 24, 24, 24, 24]])
+        sigmas = self.es.get_sigmas(mags)
         expected_sigmas = np.array([[0.03383325, 0.01618119, 0.01696213, 0.02418282, 0.04190728, 0.09457142]])
         np.testing.assert_array_almost_equal(sigmas, expected_sigmas, decimal=7)
 
@@ -34,8 +34,8 @@ class TestTransformUtils(unittest.TestCase):
 
         """
         # arbitrary mags array for es instantiation, we don't use this
-        es1 = ErrorSimulator(self.mags, depth=10)
-        es2 = ErrorSimulator(self.mags, depth='single_visit')
+        es1 = ErrorSimulator(depth=10)
+        es2 = ErrorSimulator(depth='single_visit')
         table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10], 10: [0.005, 0.005, 0.006, 0.009]}
 
         for mag in range(21, 25):
@@ -69,7 +69,7 @@ class TestTransformUtils(unittest.TestCase):
         for band in all_bands:
             m = -np.inf
             sigma_rand = self.es.calculate_rand_err(band, m) ** 0.5
-
+            #print(sigma_rand)
             assert (sigma_rand == 0)
 
     @classmethod
