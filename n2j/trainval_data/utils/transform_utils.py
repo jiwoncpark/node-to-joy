@@ -25,9 +25,11 @@ class ErrorSimulator:
     bands = np.array([['u', 'g', 'r', 'i', 'z', 'y']])
 
     # expected median zenith sky brightness
-    m_skys = np.array([[22.99, 22.26, 21.20, 20.48, 19.60, 18.61]])  # row 1, Table 2
+    m_skys = np.array([[22.71329, 22.19191, 21.10172, 19.93964, 19.00231, 18.24634]])  # OpSim filtSkyBrightness medians
+    # m_skys = np.array([[22.99, 22.26, 21.20, 20.48, 19.60, 18.61]])  # row 1, Table 2
     # expected median zenith seeing (FWHM, arcsec) - FIXME - should we add scaling with airmass, X (~X^0.6)?
-    seeings = np.array([[0.92, 0.87, 0.83, 0.80, 0.78, 0.76]])  # row 3, Table 2
+    seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 0.840263, 0.8486855]])  # OpSim FWHMeff medians
+    # seeings = np.array([[0.92, 0.87, 0.83, 0.80, 0.78, 0.76]])  # row 3, Table 2
     # band-dependent param, depends on sky brightness, readout noise, etc.,
     gammas = np.array([[0.038, 0.039, 0.039, 0.039, 0.039, 0.039]])  # row 4, Table 2
     # adopted atmospheric extinction
@@ -39,7 +41,7 @@ class ErrorSimulator:
 
     num_visits_10_year = np.array([[56, 80, 184, 184, 160, 160]])  # from 2019 Science Drivers table 1
 
-    def __init__(self, mag_idx=[2, 3, 4, 5, 6, 7], depth=5, airmass=1.2):
+    def __init__(self, mag_idx=[2, 3, 4, 5, 6, 7], depth=5, airmass=1.15304):  # median OpSimairmass
         self.mag_idx = mag_idx  # array containing locations of ugrizy mags in x
         self.depth = depth
         self.airmass = airmass

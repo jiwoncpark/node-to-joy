@@ -21,12 +21,17 @@ class TestTransformUtils(unittest.TestCase):
         """
         mag = 24
         sigma_u = self.es.calculate_photo_err('u', mag)
-        np.testing.assert_equal(sigma_u, 0.033833253781615086)
+        np.testing.assert_almost_equal(sigma_u, 0.04086201169946179)
+        # if using Table 2 seeing, sky brightness, rather than OpSim:
+        # np.testing.assert_equal(sigma_u, 0.033833253781615086)
 
         mags = np.array([[24, 24, 24, 24, 24, 24]])
         sigmas = self.es.get_sigmas(mags)
-        expected_sigmas = np.array([[0.03383325, 0.01618119, 0.01696213, 0.02418282, 0.04190728, 0.09457142]])
-        np.testing.assert_array_almost_equal(sigmas, expected_sigmas, decimal=7)
+        expected_sigmas = np.array([[0.04086201, 0.01766672, 0.01868475, 0.03230198, 0.05806892, 0.12310554]])
+        # if using Table 2 seeing, sky brightness, rather than OpSim:
+        # expected_sigmas = np.array([[0.03383325, 0.01618119, 0.01696213, 0.02418282, 0.04190728, 0.09457142]])
+        np.testing.assert_array_almost_equal(sigmas, expected_sigmas, decimal=5)
+
 
     def test_r_band_lit(self):
         """Test if calculate_photo_err() r band values match Table 3 values
