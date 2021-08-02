@@ -67,4 +67,4 @@ if __name__ == '__main__':
     #for param_group, lr in zip(trainer.optimizer.param_groups,
     #                           get_lr(0.2, trainer.optimizer)):
     #    param_group['lr'] = lr
-    trainer.train(n_epochs=cfg['optimization']['n_epochs'])
+    trainer.train(n_epochs=cfg['n_epochs'])
