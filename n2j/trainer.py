@@ -345,7 +345,7 @@ class Trainer:
         # Plot
         fig, ax = plt.subplots()
         ax.errorbar(y, y=mu_global_pred, yerr=sig_global_pred,
-                    marker='.', fmt='o')
+                    fmt='o')
         interval = np.linspace(np.min(y), np.max(y), 20)
         ax.plot(interval, interval, linestyle='--')
         ax.set_xlabel(r"True kappa")

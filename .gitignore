@@ -7,6 +7,7 @@
 *.h5
 *.hdf5
 *.png
+n2j/data/
 
 # HTML builds
 docs/_build/*

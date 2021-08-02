@@ -61,6 +61,7 @@ trainer:
   device_type: 'cuda'
   checkpoint_dir: results/E1
   seed: 1028
+n_epochs: 200
 # If you want to resume training from a checkpoint
 resume_from:
   checkpoint_path: null
