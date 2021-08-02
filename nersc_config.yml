@@ -36,6 +36,7 @@ data:
                   'mag_i_lsst', 'mag_z_lsst', 'mag_Y_lsst']
 # Optimizer kwargs
 optimization:
+  n_epochs: 200
   early_stop_memory: 50
   weight_local_loss: 1.0
   optim_kwargs:
