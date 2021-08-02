@@ -25,10 +25,12 @@ class ErrorSimulator:
     bands = np.array([['u', 'g', 'r', 'i', 'z', 'y']])
 
     # expected median zenith sky brightness
-    m_skys = np.array([[22.71329, 22.19191, 21.10172, 19.93964, 19.00231, 18.24634]])  # OpSim filtSkyBrightness medians
+    m_skys = np.array([[22.5, 22.19191, 21.10172, 19.93964, 18.3, 17.7]])  # tuned to DC2 (u, z, y bands changed)
+    # m_skys = np.array([[22.71329, 22.19191, 21.10172, 19.93964, 19.00231, 18.24634]])  # OpSim filtSkyBrightness medians
     # m_skys = np.array([[22.99, 22.26, 21.20, 20.48, 19.60, 18.61]])  # row 1, Table 2
-    # expected median zenith seeing (FWHM, arcsec) - FIXME - should we add scaling with airmass, X (~X^0.6)?
-    seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 0.840263, 0.8486855]])  # OpSim FWHMeff medians
+    # expected median zenith seeing (FWHM, arcsec)
+    seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 1, 1]])  # # tuned to DC2 (z, y bands changed)
+    # seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 0.840263, 0.8486855]])  # OpSim FWHMeff medians
     # seeings = np.array([[0.92, 0.87, 0.83, 0.80, 0.78, 0.76]])  # row 3, Table 2
     # band-dependent param, depends on sky brightness, readout noise, etc.,
     gammas = np.array([[0.038, 0.039, 0.039, 0.039, 0.039, 0.039]])  # row 4, Table 2

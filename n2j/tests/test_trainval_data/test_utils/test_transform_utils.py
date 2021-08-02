@@ -21,13 +21,17 @@ class TestTransformUtils(unittest.TestCase):
         """
         mag = 24
         sigma_u = self.es.calculate_photo_err('u', mag)
-        np.testing.assert_almost_equal(sigma_u, 0.04086201169946179)
+        np.testing.assert_almost_equal(sigma_u, 0.04455297880298702)
+        # if using OpSim median sky brightness, rather than tuned sky brightness:
+        # np.testing.assert_almost_equal(sigma_u, 0.04086201169946179)
         # if using Table 2 seeing, sky brightness, rather than OpSim:
         # np.testing.assert_equal(sigma_u, 0.033833253781615086)
 
         mags = np.array([[24, 24, 24, 24, 24, 24]])
         sigmas = self.es.get_sigmas(mags)
-        expected_sigmas = np.array([[0.04086201, 0.01766672, 0.01868475, 0.03230198, 0.05806892, 0.12310554]])
+        expected_sigmas = np.array([[0.04455298, 0.01766673, 0.01868476, 0.03230199, 0.09370100, 0.18518317]])
+        # if using OpSim median sky brightness and seeing, rather than tuned sky brightness and seeing:
+        # expected_sigmas = np.array([[0.04086201, 0.01766672, 0.01868475, 0.03230198, 0.05806892, 0.12310554]])
         # if using Table 2 seeing, sky brightness, rather than OpSim:
         # expected_sigmas = np.array([[0.03383325, 0.01618119, 0.01696213, 0.02418282, 0.04190728, 0.09457142]])
         np.testing.assert_array_almost_equal(sigmas, expected_sigmas, decimal=5)
