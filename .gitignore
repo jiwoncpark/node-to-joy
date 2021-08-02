@@ -31,3 +31,6 @@ docs/_build/*
 *Untitled.ipynb
 *~
 *#
+
+# intellij configs
+.idea/
