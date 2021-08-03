@@ -208,7 +208,7 @@ class MagErrorSimulatorTorch:
     # row 1, Table 2
     # m_skys = [22.99, 22.26, 21.20, 20.48, 19.60, 18.61]
 
-    # expected median zenith seeing (FWHM, arcsec)
+    # Expected median zenith seeing (FWHM, arcsec)
     # tuned to DC2 (z, y bands changed)
     seeings = [1.029668, 0.951018, 0.8996875, 0.868422, 1, 1]
     # OpSim FWHMeff medians
@@ -216,8 +216,8 @@ class MagErrorSimulatorTorch:
     # row 3, Table 2
     # seeings = [0.92, 0.87, 0.83, 0.80, 0.78, 0.76]
 
-    # Madi TODO: paste what this means from the paper
-    # band-dependent param, depends on sky brightness, readout noise, etc.
+    # Band-dependent param used in sigma_rand calculation
+    # depends on sky brightness, readout noise, etc.
     # row 4, Table 2
     gammas = [0.038, 0.039, 0.039, 0.039, 0.039, 0.039]
 
@@ -230,8 +230,8 @@ class MagErrorSimulatorTorch:
     # row 6, Table 2
     C_ms = [23.09, 24.42, 24.44, 24.32, 24.16, 23.73]
 
-    # Madi TODO: where "inf" comes from
-    # Loss of depth due to instrumental noise
+    # Loss of depth due to instrumental noise in a single visit
+    # compared to infinite exposure time
     # row 8, Table 2
     delta_C_m_infs = [0.62, 0.18, 0.10, 0.07, 0.05, 0.04]
 
