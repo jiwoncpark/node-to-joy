@@ -63,7 +63,7 @@ class TestMagErrorSimulator(unittest.TestCase):
 
         for band in all_bands:
             i = all_bands.find(band)
-            m_5 = self.es.calculate_5sigma_depth_from_scratch(i)
+            m_5 = self.es.calculate_5sigma_depths()[0, i]
             sigma_rand = self.es.calculate_rand_err(band, m_5) ** 0.5
 
             assert (sigma_rand == 0.2)

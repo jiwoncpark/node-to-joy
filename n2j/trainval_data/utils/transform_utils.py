@@ -24,7 +24,7 @@ class Slicer:
 class MagErrorSimulator:
     bands = ['u', 'g', 'r', 'i', 'z', 'y']
 
-    # expected median zenith sky brightness
+    # Expected median zenith sky brightness
     # tuned to DC2 (u, z, y bands changed)
     m_skys = [22.5, 22.19191, 21.10172, 19.93964, 18.3, 17.7]
     # OpSim filtSkyBrightness medians
@@ -40,20 +40,22 @@ class MagErrorSimulator:
     # row 3, Table 2
     # seeings = [0.92, 0.87, 0.83, 0.80, 0.78, 0.76]
 
+    # Madi TODO: paste what this means from the paper
     # band-dependent param, depends on sky brightness, readout noise, etc.
     # row 4, Table 2
     gammas = [0.038, 0.039, 0.039, 0.039, 0.039, 0.039]
 
-    # adopted atmospheric extinction
+    # Adopted atmospheric extinction
     # row 5, Table 2
     k_ms = [0.491, 0.213, 0.126, 0.096, 0.069, 0.170]
 
-    # band-dependent param for calculation of 5 sigma depth,
+    # Band-dependent param for calculation of 5 sigma depth,
     # depends on throughput of optical elements and sensors
     # row 6, Table 2
     C_ms = [23.09, 24.42, 24.44, 24.32, 24.16, 23.73]
 
-    # loss of depth due to instrumental noise
+    # Madi TODO: where "inf" comes from
+    # Loss of depth due to instrumental noise
     # row 8, Table 2
     delta_C_m_infs = [0.62, 0.18, 0.10, 0.07, 0.05, 0.04]
 
@@ -63,8 +65,9 @@ class MagErrorSimulator:
     def __init__(self,
                  mag_idx=[2, 3, 4, 5, 6, 7],
                  which_bands=list('ugrizy'),
+                 override_kwargs=None,
                  depth=5,
-                 airmass=1.15304):  # median OpSimairmass
+                 airmass=1.15304):  # median OpSim airmass
         """
         Parameters
         ----------
@@ -75,12 +78,19 @@ class MagErrorSimulator:
             Must be same length as `mag_idx`
         depth: float
             LSST survey depth in years or "single_visit"
+        override_kwargs: dict
+            band-dependent parameters to overwrite
 
         """
         self.mag_idx = mag_idx
         self.which_bands = which_bands
         self.depth = depth
         self.airmass = airmass
+        # Overwrite band-dependent params
+        if override_kwargs is not None:
+            for k, v in override_kwargs.items():
+                setattr(self, k, v)
+        # Format them for vectorization
         self._format_input_params()
 
         if depth == 'single_visit':
@@ -89,6 +99,9 @@ class MagErrorSimulator:
             # Downscale number of visits based on 10-year depth
             # assuming annual obs strategy is fixed
             self.num_visits = self.num_visits_10_year*depth//10
+        # Precompute derivative params
+        self.delta_C_ms = self.calculate_delta_C_ms()
+        self.m_5s = self.calculate_5sigma_depths()
 
     def _format_input_params(self):
         """Convert param lists into arrays for vectorized computation
@@ -101,41 +114,37 @@ class MagErrorSimulator:
             val = np.array(getattr(self, key)).reshape([1, -1])
             setattr(self, key, val)
 
-    def calculate_delta_C_m(self, band_index):
-        """Returns delta_C_m correction for num_visits > 1 (i.e. exposure times > 30s),
+    def calculate_delta_C_ms(self):
+        """Returns delta_C_m correction for num_visits > 1
+        (i.e. exposure times > 30s), for ugrizy
         following Eq 7 in Science Drivers.
-        """
-        delta_C_m_inf = self.delta_C_m_infs[0, band_index]
-        delta_C_m = delta_C_m_inf - 1.25 * np.log10(1 + (10 ** (0.8 * delta_C_m_inf) - 1) / self.num_visits[0, band_index])
-        return delta_C_m
 
-    def calculate_5sigma_depth_from_scratch(self, band_index):
+        """
+        delta_C_ms = self.delta_C_m_infs
+        to_log = 1 + (10**(0.8*self.delta_C_m_infs) - 1)/self.num_visits
+        delta_C_ms -= 1.25*np.log10(to_log)
+        return delta_C_ms
+
+    def calculate_5sigma_depths(self):
         """Returns m_5 found using Eq 6 in Science Drivers,
-        using eff seeing, sky brightness, exposure time, extinction coeff, airmass.
+        using eff seeing, sky brightness, exposure time,
+        extinction coeff, airmass, for ugrizy.
         Includes dependence on number of visits.
+
         """
-        i = band_index
-
-        C_m = self.C_ms[0, i]
-        m_sky = self.m_skys[0, i]
-        seeing = self.seeings[0, i]
-        k_m = self.k_ms[0, i]
-        num_visit = self.num_visits[0, i]
-
-        m_5 = C_m + 0.50 * (m_sky - 21) + 2.5 * np.log10(0.7 / seeing) \
-            + 1.25 * np.log10(num_visit) - k_m * (self.airmass - 1)
-        # print("m_5 pre delta_C_m", m_5)
-        # print("delta_C_m(i)", self.delta_C_m(i))
-        m_5 += self.calculate_delta_C_m(i)
-
-        return m_5
+        m_5s = self.C_ms + 0.50*(self.m_skys - 21) \
+            + 2.5*np.log10(0.7/self.seeings) \
+            + 1.25*np.log10(self.num_visits) \
+            - self.k_ms*(self.airmass - 1) \
+            + self.delta_C_ms
+        return m_5s
 
     def calculate_rand_err(self, band, mag):
         """"Returns sigma_rand_squared"""
         all_bands = 'ugrizy'
         band_index = all_bands.find(band)
 
-        m_5 = self.calculate_5sigma_depth_from_scratch(band_index)
+        m_5 = self.m_5s[0, band_index]
         # print("m5", m_5, "band_index", band_index)
         x = 10.0 ** (0.4 * (mag - m_5))
         # print("x", x)
@@ -161,7 +170,8 @@ class MagErrorSimulator:
 
         # systematic photometric error
         sigma_sys = 0.005
-        return np.sqrt(sigma_sys**2 + sigma_rand_squared)  # adding errors in quadrature
+        # adding errors in quadrature
+        return np.sqrt(sigma_sys**2 + sigma_rand_squared)
 
     def get_sigmas(self, mags):
         calculate_photo_err_v = np.vectorize(self.calculate_photo_err)
@@ -176,7 +186,8 @@ class MagErrorSimulator:
         # representing the true magnitudes where 6 is for ugrizy
 
         sigmas = self.get_sigmas(mags)
-        mags += np.random.normal(loc=np.zeros((1, 6)), scale=sigmas)  # FIXME: loc shape
+        # FIXME: loc shape
+        mags += np.random.normal(loc=np.zeros((1, 6)), scale=sigmas)
         x[:, self.mag_idx] = mags
         return x
 
