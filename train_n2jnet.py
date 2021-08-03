@@ -27,6 +27,7 @@ if __name__ == '__main__':
                          batch_size=cfg['data']['batch_size'],
                          num_workers=cfg['data']['num_workers'],
                          rebin=False,
+                         noise_kwargs=cfg['data']['noise_kwargs'],
                          )
     # FIXME: must be run after train
     val_raytracing = [os.path.join(cfg['data']['in_dir'],
@@ -44,6 +45,7 @@ if __name__ == '__main__':
                          is_train=False,
                          batch_size=cfg['data']['val_batch_size'],
                          rebin=False,
+                         noise_kwargs=cfg['data']['noise_kwargs'],
                          )
     if False:
         print(trainer.train_dataset[0].y_local)

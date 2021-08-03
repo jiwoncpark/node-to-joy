@@ -67,7 +67,12 @@ class Trainer:
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
-                     rebin=False, num_workers=2):
+                     rebin=False, num_workers=2,
+                     noise_kwargs=dict(mag=dict(
+                                                override_kwargs=None,
+                                                depth=5,
+                                                )
+                                       )):
         """Load dataset and dataloader for training or validation
 
         Note
@@ -109,7 +114,8 @@ class Trainer:
                 mag_idx, which_bands = get_bands_in_x(sub_features)
                 print(f"Mag errors added to {which_bands}")
                 magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
-                                                which_bands=which_bands)
+                                                which_bands=which_bands,
+                                                **noise_kwargs['mag'])
                 norming = Standardizer(self.X_mean, self.X_std)
                 self.transform_X = transforms.Compose([slicing,
                                                       magerr,
