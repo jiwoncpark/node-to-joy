@@ -15,7 +15,10 @@ from torch.utils.data.sampler import WeightedRandomSampler, SubsetRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
-from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
+from n2j.trainval_data.utils.transform_utils import (Standardizer,
+                                                     Slicer,
+                                                     MagErrorSimulatorTorch,
+                                                     get_bands_in_x)
 import matplotlib.pyplot as plt
 
 
@@ -102,8 +105,14 @@ class Trainer:
                 self.X_mean = stats['X_mean'][:, idx]
                 self.X_std = stats['X_std'][:, idx]
                 slicing = Slicer(idx)
+                mag_idx, which_bands = get_bands_in_x(sub_features)
+                print(f"Mag errors added to {which_bands}")
+                magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
+                                                which_bands=which_bands)
                 norming = Standardizer(self.X_mean, self.X_std)
-                self.transform_X = transforms.Compose([slicing, norming])
+                self.transform_X = transforms.Compose([slicing,
+                                                      magerr,
+                                                      norming])
             else:
                 self.X_mean = stats['X_mean']
                 self.X_std = stats['X_std']
@@ -124,11 +133,13 @@ class Trainer:
                 self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
                 self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
                 slicing_Y_local = Slicer(idx_Y_local)
-                norming_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                norming_Y_local = Standardizer(self.Y_local_mean,
+                                               self.Y_local_std)
                 self.transform_Y_local = transforms.Compose([slicing_Y_local,
                                                             norming_Y_local])
             else:
-                self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                self.transform_Y_local = Standardizer(self.Y_local_mean,
+                                                      self.Y_local_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
