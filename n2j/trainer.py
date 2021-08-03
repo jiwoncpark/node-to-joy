@@ -2,6 +2,7 @@
 
 """
 import os
+import os.path as osp
 import random
 import datetime
 import json
@@ -45,7 +46,7 @@ class Trainer:
         self.seed_everything()
         self.checkpoint_dir = checkpoint_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.logger = SummaryWriter(os.path.join(self.checkpoint_dir, 'runs'))
+        self.logger = SummaryWriter(osp.join(self.checkpoint_dir, 'runs'))
         self.epoch = 0
         self.early_stop_crit = []
         self.last_saved_val_loss = np.inf
@@ -94,11 +95,11 @@ class Trainer:
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
-            if os.path.exists(os.path.join(self.checkpoint_dir, 'stats.pt')):
-                stats = torch.load(os.path.join(self.checkpoint_dir, 'stats.pt'))
+            if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
+                stats = torch.load(osp.join(self.checkpoint_dir, 'stats.pt'))
             else:
                 stats = self.train_dataset.data_stats
-                torch.save(stats, os.path.join(self.checkpoint_dir, 'stats.pt'))
+                torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
             if sub_features:
                 idx = get_idx(features, sub_features)
@@ -171,16 +172,35 @@ class Trainer:
                                                    shuffle=True,
                                                    num_workers=num_workers,
                                                    drop_last=True)
-        else:
+        else:  # validation
             self.val_dataset = dataset
             self.val_dataset.transform_X = self.transform_X
             self.val_dataset.transform_Y = self.transform_Y
             self.val_dataset.transform_Y_local = self.transform_Y_local
-            self.val_loader = DataLoader(self.val_dataset,
-                                         batch_size=batch_size,
-                                         shuffle=False,
-                                         num_workers=num_workers,
-                                         drop_last=True)
+            # Compute or retrieve stats
+            stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
+            if osp.exists(stats_val_path):
+                stats_val = torch.load(stats_val_path)
+            else:
+                stats_val = self.val_dataset.data_stats_val
+                torch.save(stats_val, stats_val_path)
+            # Val loading option 1: Subsample from a distribution
+            if data_kwargs['subsample_pdf_func'] is not None:
+                self.class_weight = None
+                sampler = SubsetRandomSampler(stats_val['subsample_idx'])
+                self.val_loader = DataLoader(self.val_dataset,
+                                             batch_size=batch_size,
+                                             sampler=sampler,
+                                             num_workers=num_workers,
+                                             drop_last=True)
+            else:
+                # Val loading option 2: No special sampling, no shuffle
+                self.class_weight = None
+                self.val_loader = DataLoader(self.val_dataset,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             num_workers=num_workers,
+                                             drop_last=True)
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
@@ -198,7 +218,7 @@ class Trainer:
 
         Parameters
         ----------
-        state_path : str or os.path object
+        state_path : str or osp.object
             path of the state dict to load
 
         """
@@ -237,7 +257,7 @@ class Trainer:
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
         model_fname = '{:s}_{:s}.mdl'.format(self.model_name, time_stamp)
-        self.model_path = os.path.join(self.checkpoint_dir, model_fname)
+        self.model_path = osp.join(self.checkpoint_dir, model_fname)
         torch.save(state, self.model_path)
 
     def configure_optim(self, early_stop_memory=20,
@@ -303,7 +323,7 @@ class Trainer:
             if ~is_decreasing(self.early_stop_crit) and memory_filled:
                 break
             if val_loss_i < self.last_saved_val_loss:
-                os.remove(self.model_path) if os.path.exists(self.model_path) else None
+                os.remove(self.model_path) if osp.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
                 self.last_saved_val_loss = val_loss_i
         self.logger.close()

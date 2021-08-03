@@ -135,6 +135,42 @@ class CosmoDC2Graph(ConcatDataset):
                      )
         return stats
 
+    @cached_property
+    def data_stats_val(self):
+        """Statistics of the X, Y data on validation set used for
+        resampling to mimic training dist.
+        Mean, std computation skipped.
+
+        """
+        print("Computing resampling stats for validation set...")
+        B = 1000
+        dummy_loader = DataLoader(self,  # val_dataset
+                                  batch_size=B,
+                                  shuffle=False,
+                                  num_workers=2,
+                                  drop_last=False)
+        # If subsample_pdf_func is None, don't need this attribute
+        assert self.subsample_pdf_func is not None
+        torch.multiprocessing.set_sharing_strategy('file_system')
+        y_values_orig = np.zeros(len(self))  # [n_val,]
+        subsample_weight = np.zeros(len(self))  # [n_val,]
+        # Evaluate target density on all validation examples
+        for i, b in enumerate(dummy_loader):
+            # Log original kappa values
+            k_batch = b.y[:, 0].cpu().numpy()
+            y_values_orig[i*B:(i+1)*B] = k_batch
+            # Compute subsampling weights
+            subsample_weight[i*B:(i+1)*B] = self.subsample_pdf_func(k_batch)
+        rng = np.random.default_rng(456)
+        kde = scipy.stats.gaussian_kde(y_values_orig, bw_method='scott')
+        p = subsample_weight/kde.pdf(y_values_orig)
+        p /= np.sum(p)
+        subsample_idx = rng.choice(np.arange(len(y_values_orig)),
+                                   p=p, replace=True, size=len(y_values_orig))
+        subsample_idx = subsample_idx.tolist()
+        stats_val = dict(subsample_idx=subsample_idx)
+        return stats_val
+
     def __getitem__(self, idx):
         if idx < 0:
             if -idx > len(self):

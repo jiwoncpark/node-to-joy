@@ -34,14 +34,16 @@ if __name__ == '__main__':
     trainer.load_dataset(dict(features=cfg['data']['features'],
                               raytracing_out_dirs=val_raytracing,
                               healpixes=cfg['data']['val_hp'],
-                              n_data=cfg['data']['n_train'],
+                              n_data=cfg['data']['n_val'],
                               aperture_size=1.0,
+                              subsample_pdf_func=norm_obj.pdf,
                               in_dir=cfg['data']['in_dir']),
                          sub_features=cfg['data']['sub_features'],
                          sub_target=cfg['data']['sub_target'],
                          sub_target_local=cfg['data']['sub_target_local'],
                          is_train=False,
                          batch_size=cfg['data']['val_batch_size'],
+                         rebin=False,
                          )
     if False:
         print(trainer.train_dataset[0].y_local)
