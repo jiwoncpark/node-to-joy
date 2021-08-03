@@ -84,6 +84,8 @@ class MagErrorSimulator:
         """
         self.mag_idx = mag_idx
         self.which_bands = which_bands
+        all_bands = list('ugrizy')
+        self.idx_in_ugrizy = [all_bands.index(b) for b in self.which_bands]
         self.depth = depth
         self.airmass = airmass
         # Overwrite band-dependent params
@@ -102,16 +104,29 @@ class MagErrorSimulator:
         # Precompute derivative params
         self.delta_C_ms = self.calculate_delta_C_ms()
         self.m_5s = self.calculate_5sigma_depths()
+        self._slice_input_params()
 
     def _format_input_params(self):
         """Convert param lists into arrays for vectorized computation
 
         """
-        params_list = ['bands', 'm_skys', 'seeings', 'gammas']
+        params_list = ['m_skys', 'seeings', 'gammas']
         params_list += ['k_ms', 'C_ms', 'delta_C_m_infs']
         params_list += ['num_visits_10_year']
         for key in params_list:
             val = np.array(getattr(self, key)).reshape([1, -1])
+            setattr(self, key, val)
+
+    def _slice_input_params(self):
+        """Slice and reorder input params so only the relevant bands
+        in `self.which_bands` remain, in that order
+
+        """
+        params_list = ['m_skys', 'seeings', 'gammas']
+        params_list += ['k_ms', 'C_ms', 'delta_C_m_infs']
+        params_list += ['num_visits_10_year', 'delta_C_ms', 'm_5s']
+        for key in params_list:
+            val = getattr(self, key)[:, self.idx_in_ugrizy]
             setattr(self, key, val)
 
     def calculate_delta_C_ms(self):
@@ -139,33 +154,21 @@ class MagErrorSimulator:
             + self.delta_C_ms
         return m_5s
 
-    def calculate_rand_err(self, band, mag):
+    def calculate_rand_err(self, mags):
         """"Returns sigma_rand_squared"""
-        all_bands = 'ugrizy'
-        band_index = all_bands.find(band)
-
-        m_5 = self.m_5s[0, band_index]
-        # print("m5", m_5, "band_index", band_index)
-        x = 10.0 ** (0.4 * (mag - m_5))
-        # print("x", x)
-
-        gamma = self.gammas[0, band_index]
-        # print("gamma", gamma)
-        sigma_rand_squared = (0.04 - gamma) * x + gamma * (x ** 2)
-
+        x = 10.0 ** (0.4 * (mags - self.m_5s))
+        sigma_rand_squared = (0.04 - self.gammas)*x + self.gammas*(x**2)
         return sigma_rand_squared
 
-    def calculate_photo_err(self, band, mag):
+    def get_sigmas(self, mags):
         """"Returns sigma (photometric error in mag).
         Calculated using figures and formulae from Science Drivers
 
         Params:
-        - band (str) ['u', 'g', 'r', 'i', 'z', 'y']
         - AB mag (float)
-        - depth int in range(1, 11) or 'single_visit'
         """
         # random photometric error
-        sigma_rand_squared = self.calculate_rand_err(band, mag)
+        sigma_rand_squared = self.calculate_rand_err(mags)
         # print("rand portion", sigma_rand_squared**0.5)
 
         # systematic photometric error
@@ -173,21 +176,11 @@ class MagErrorSimulator:
         # adding errors in quadrature
         return np.sqrt(sigma_sys**2 + sigma_rand_squared)
 
-    def get_sigmas(self, mags):
-        calculate_photo_err_v = np.vectorize(self.calculate_photo_err)
-
-        sigmas = calculate_photo_err_v(self.bands, mags)
-        return sigmas
-        # FIXME: take out np.vectorize()
-
     def __call__(self, x):
-        mags = x[:, self.mag_idx]
-        # mags: numpy array of shape (batch_size, 6)
-        # representing the true magnitudes where 6 is for ugrizy
-
+        # true magnitudes
+        mags = x[:, self.mag_idx]  # shape [n_nodes, len(self.mag_idx)]
         sigmas = self.get_sigmas(mags)
-        # FIXME: loc shape
-        mags += np.random.normal(loc=np.zeros((1, 6)), scale=sigmas)
+        mags += np.random.normal(loc=0.0, scale=sigmas)
         x[:, self.mag_idx] = mags
         return x
 

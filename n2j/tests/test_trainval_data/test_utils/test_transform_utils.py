@@ -13,14 +13,16 @@ class TestMagErrorSimulator(unittest.TestCase):
         """Set global defaults for tests
 
         """
-        cls.es = MagErrorSimulator()
+        pass
 
     def test_basic(self):
         """Verify correspondence with same analytic function in Collab notebook
 
         """
+        mes = MagErrorSimulator()
         mag = 24
-        sigma_u = self.es.calculate_photo_err('u', mag)
+        u_idx = list('ugrizy').index('u')  # 0
+        sigma_u = mes.get_sigmas(mag)[:, u_idx]
         np.testing.assert_almost_equal(sigma_u, 0.04455297880298702)
         # if using OpSim median sky brightness, rather than tuned sky brightness:
         # np.testing.assert_almost_equal(sigma_u, 0.04086201169946179)
@@ -28,7 +30,7 @@ class TestMagErrorSimulator(unittest.TestCase):
         # np.testing.assert_equal(sigma_u, 0.033833253781615086)
 
         mags = np.array([[24, 24, 24, 24, 24, 24]])
-        sigmas = self.es.get_sigmas(mags)
+        sigmas = mes.get_sigmas(mags)
         expected_sigmas = np.array([[0.04455298, 0.01766673, 0.01868476, 0.03230199, 0.09370100, 0.18518317]])
         # if using OpSim median sky brightness and seeing, rather than tuned sky brightness and seeing:
         # expected_sigmas = np.array([[0.04086201, 0.01766672, 0.01868475, 0.03230198, 0.05806892, 0.12310554]])
@@ -42,48 +44,73 @@ class TestMagErrorSimulator(unittest.TestCase):
 
         """
         # arbitrary mags array for es instantiation, we don't use this
-        es1 = MagErrorSimulator(depth=10)
-        es2 = MagErrorSimulator(depth='single_visit')
-        table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10], 10: [0.005, 0.005, 0.006, 0.009]}
+        mes1 = MagErrorSimulator(depth=10)
+        mes2 = MagErrorSimulator(depth='single_visit')
+        table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10],
+                           10: [0.005, 0.005, 0.006, 0.009]}
+        r_idx = list('ugrizy').index('r')  # 2
+        for i, mag in enumerate(range(21, 25)):
+            sigma_r = mes1.get_sigmas(mag)[:, r_idx]
+            np.testing.assert_almost_equal(sigma_r,
+                                           table_3_r_sigma[10][i],
+                                           decimal=1)
 
-        for mag in range(21, 25):
-            i = mag-21
-            sigma_r = es1.calculate_photo_err('r', mag)
-            np.testing.assert_almost_equal(sigma_r, table_3_r_sigma[10][i], decimal=1)
-
-            sigma_r = es2.calculate_photo_err('r', mag)
-            np.testing.assert_almost_equal(sigma_r, table_3_r_sigma['single_visit'][i], decimal=1)
+            sigma_r = mes2.get_sigmas(mag)[:, r_idx]
+            np.testing.assert_almost_equal(sigma_r,
+                                           table_3_r_sigma['single_visit'][i],
+                                           decimal=1)
 
     def test_sigma_rand_m_5(self):
         """Test sigma_rand = 0.2 for mag = m_5 (definition of 5-sigma depth)
 
         """
-
-        all_bands = 'ugrizy'
-
-        for band in all_bands:
-            i = all_bands.find(band)
-            m_5 = self.es.calculate_5sigma_depths()[0, i]
-            sigma_rand = self.es.calculate_rand_err(band, m_5) ** 0.5
-
-            assert (sigma_rand == 0.2)
+        mes = MagErrorSimulator()
+        m_5 = mes.calculate_5sigma_depths()
+        sigma_rand = mes.calculate_rand_err(m_5)**0.5
+        np.testing.assert_equal(sigma_rand, 0.2)
 
     def test_sigma_rand_infinite_brightness(self):
         """Test that sigma_rand = 0 for mag = -inf
 
         """
-        all_bands = 'ugrizy'
+        mes = MagErrorSimulator()
+        m = -np.inf
+        sigma_rand = mes.calculate_rand_err(m)**0.5
+        np.testing.assert_equal(sigma_rand, 0.0)
 
-        for band in all_bands:
-            m = -np.inf
-            sigma_rand = self.es.calculate_rand_err(band, m) ** 0.5
-            #print(sigma_rand)
-            assert (sigma_rand == 0)
+    def test_shapes_call(self):
+        """Test output shapes of __call__ given input x
 
-    def test_shapes(self):
-        in_mags = 22.0 + np.random.normal(size=[15, 8])
-        out_mags = self.es(in_mags)
+        """
+        mes = MagErrorSimulator()
+        # batched x
+        in_x = 22.0 + np.random.normal(size=[15, 8])
+        out_mags = mes(in_x)
         np.testing.assert_equal(out_mags.shape, [15, 8])
+
+    def test_shapes_get_sigmas(self):
+        """Test output shapes of get_sigmas given input mags
+
+        """
+        # All 6 bands, scalar mag
+        mes = MagErrorSimulator(mag_idx=None,  # doesn't matter here
+                                which_bands=list('ugrizy'))  # default
+        in_mags = 22.0 + np.random.normal()
+        out_sigmas = mes.get_sigmas(in_mags)
+        np.testing.assert_equal(out_sigmas.shape, [1, 6])
+        # Partial bands, scalar mag
+        mes = MagErrorSimulator(mag_idx=None,  # doesn't matter here
+                                which_bands=['z', 'i', 'g'])  # default
+        in_mags = 22.0 + np.random.normal()
+        out_sigmas = mes.get_sigmas(in_mags)
+        np.testing.assert_equal(out_sigmas.shape, [1, 3])
+        # Partial bands, vector mag
+        mes = MagErrorSimulator(mag_idx=None,  # doesn't matter here
+                                which_bands=['z', 'i', 'g'])  # default
+        in_mags = 22.0 + np.random.normal(size=[15, 3])
+        out_sigmas = mes.get_sigmas(in_mags)
+        np.testing.assert_equal(out_sigmas.shape, [15, 3])
+
 
     @classmethod
     def tearDownClass(cls):
