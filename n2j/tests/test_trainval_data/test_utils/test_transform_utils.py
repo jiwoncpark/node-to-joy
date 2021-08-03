@@ -55,7 +55,7 @@ class TestMagErrorSimulator(unittest.TestCase):
         for mags 21-24, single visit and 10 year depths
 
         """
-        # arbitrary mags array for es instantiation, we don't use this
+        # arbitrary mags array for mes instantiation, we don't use this
         mes1 = MagErrorSimulator(depth=10)
         mes2 = MagErrorSimulator(depth='single_visit')
         table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10],
@@ -169,7 +169,7 @@ class TestMagErrorSimulatorTorch(unittest.TestCase):
         for mags 21-24, single visit and 10 year depths
 
         """
-        # arbitrary mags array for es instantiation, we don't use this
+        # arbitrary mags array for mes instantiation, we don't use this
         mes1 = MagErrorSimulatorTorch(depth=10)
         mes2 = MagErrorSimulatorTorch(depth='single_visit')
         table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10],
