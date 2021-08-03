@@ -1,10 +1,10 @@
 import unittest
 import numpy as np
-from n2j.trainval_data.utils.transform_utils import ErrorSimulator
+from n2j.trainval_data.utils.transform_utils import MagErrorSimulator
 
 
-class TestTransformUtils(unittest.TestCase):
-    """A suite of tests verifying the magnitude ErrorSimulator methods
+class TestMagErrorSimulator(unittest.TestCase):
+    """A suite of tests verifying the magnitude MagErrorSimulator methods
 
     """
 
@@ -13,7 +13,7 @@ class TestTransformUtils(unittest.TestCase):
         """Set global defaults for tests
 
         """
-        cls.es = ErrorSimulator()
+        cls.es = MagErrorSimulator()
 
     def test_basic(self):
         """Verify correspondence with same analytic function in Collab notebook
@@ -36,15 +36,14 @@ class TestTransformUtils(unittest.TestCase):
         # expected_sigmas = np.array([[0.03383325, 0.01618119, 0.01696213, 0.02418282, 0.04190728, 0.09457142]])
         np.testing.assert_array_almost_equal(sigmas, expected_sigmas, decimal=5)
 
-
     def test_r_band_lit(self):
         """Test if calculate_photo_err() r band values match Table 3 values
         for mags 21-24, single visit and 10 year depths
 
         """
         # arbitrary mags array for es instantiation, we don't use this
-        es1 = ErrorSimulator(depth=10)
-        es2 = ErrorSimulator(depth='single_visit')
+        es1 = MagErrorSimulator(depth=10)
+        es2 = MagErrorSimulator(depth='single_visit')
         table_3_r_sigma = {'single_visit': [0.01, 0.02, 0.04, 0.10], 10: [0.005, 0.005, 0.006, 0.009]}
 
         for mag in range(21, 25):
@@ -81,9 +80,15 @@ class TestTransformUtils(unittest.TestCase):
             #print(sigma_rand)
             assert (sigma_rand == 0)
 
+    def test_shapes(self):
+        in_mags = 22.0 + np.random.normal(size=[15, 8])
+        out_mags = self.es(in_mags)
+        np.testing.assert_equal(out_mags.shape, [15, 8])
+
     @classmethod
     def tearDownClass(cls):
         pass
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -21,38 +21,87 @@ class Slicer:
         return x[:, self.feature_idx]
 
 
-class ErrorSimulator:
-    bands = np.array([['u', 'g', 'r', 'i', 'z', 'y']])
+class MagErrorSimulator:
+    bands = ['u', 'g', 'r', 'i', 'z', 'y']
 
     # expected median zenith sky brightness
-    m_skys = np.array([[22.5, 22.19191, 21.10172, 19.93964, 18.3, 17.7]])  # tuned to DC2 (u, z, y bands changed)
-    # m_skys = np.array([[22.71329, 22.19191, 21.10172, 19.93964, 19.00231, 18.24634]])  # OpSim filtSkyBrightness medians
-    # m_skys = np.array([[22.99, 22.26, 21.20, 20.48, 19.60, 18.61]])  # row 1, Table 2
+    # tuned to DC2 (u, z, y bands changed)
+    m_skys = [22.5, 22.19191, 21.10172, 19.93964, 18.3, 17.7]
+    # OpSim filtSkyBrightness medians
+    # m_skys = [22.71329, 22.19191, 21.10172, 19.93964, 19.00231, 18.24634]
+    # row 1, Table 2
+    # m_skys = [22.99, 22.26, 21.20, 20.48, 19.60, 18.61]
+
     # expected median zenith seeing (FWHM, arcsec)
-    seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 1, 1]])  # # tuned to DC2 (z, y bands changed)
-    # seeings = np.array([[1.029668, 0.951018, 0.8996875, 0.868422, 0.840263, 0.8486855]])  # OpSim FWHMeff medians
-    # seeings = np.array([[0.92, 0.87, 0.83, 0.80, 0.78, 0.76]])  # row 3, Table 2
-    # band-dependent param, depends on sky brightness, readout noise, etc.,
-    gammas = np.array([[0.038, 0.039, 0.039, 0.039, 0.039, 0.039]])  # row 4, Table 2
+    # tuned to DC2 (z, y bands changed)
+    seeings = [1.029668, 0.951018, 0.8996875, 0.868422, 1, 1]
+    # OpSim FWHMeff medians
+    # seeings = [1.029668, 0.951018, 0.8996875, 0.868422, 0.840263, 0.8486855]
+    # row 3, Table 2
+    # seeings = [0.92, 0.87, 0.83, 0.80, 0.78, 0.76]
+
+    # band-dependent param, depends on sky brightness, readout noise, etc.
+    # row 4, Table 2
+    gammas = [0.038, 0.039, 0.039, 0.039, 0.039, 0.039]
+
     # adopted atmospheric extinction
-    k_ms = np.array([[0.491, 0.213, 0.126, 0.096, 0.069, 0.170]])  # row 5, Table 2
-    # band-dependent param for calculation of 5 sigma depth, depends on throughput of optical elements and sensors
-    C_ms = np.array([[23.09, 24.42, 24.44, 24.32, 24.16, 23.73]])  # row 6, Table 2
+    # row 5, Table 2
+    k_ms = [0.491, 0.213, 0.126, 0.096, 0.069, 0.170]
+
+    # band-dependent param for calculation of 5 sigma depth,
+    # depends on throughput of optical elements and sensors
+    # row 6, Table 2
+    C_ms = [23.09, 24.42, 24.44, 24.32, 24.16, 23.73]
+
     # loss of depth due to instrumental noise
-    delta_C_m_infs = np.array([[0.62, 0.18, 0.10, 0.07, 0.05, 0.04]])  # row 8, Table 2
+    # row 8, Table 2
+    delta_C_m_infs = [0.62, 0.18, 0.10, 0.07, 0.05, 0.04]
 
-    num_visits_10_year = np.array([[56, 80, 184, 184, 160, 160]])  # from 2019 Science Drivers table 1
+    # from 2019 Science Drivers table 1
+    num_visits_10_year = [56, 80, 184, 184, 160, 160]
 
-    def __init__(self, mag_idx=[2, 3, 4, 5, 6, 7], depth=5, airmass=1.15304):  # median OpSimairmass
-        self.mag_idx = mag_idx  # array containing locations of ugrizy mags in x
+    def __init__(self,
+                 mag_idx=[2, 3, 4, 5, 6, 7],
+                 which_bands=list('ugrizy'),
+                 depth=5,
+                 airmass=1.15304):  # median OpSimairmass
+        """
+        Parameters
+        ----------
+        mag_idx: list
+            indices of ugrizy mags in x
+        which_bands: list
+            bands corresponding to mag_idx.
+            Must be same length as `mag_idx`
+        depth: float
+            LSST survey depth in years or "single_visit"
+
+        """
+        self.mag_idx = mag_idx
+        self.which_bands = which_bands
         self.depth = depth
         self.airmass = airmass
+        self._format_input_params()
 
-        self.num_visits = np.ones((1, 6))
-        if depth != 'single_visit':  # assuming annual obs strategy is fixed
-            self.num_visits = np.array([(x * depth) // 10 for x in self.num_visits_10_year])
+        if depth == 'single_visit':
+            self.num_visits = np.ones((1, 6))
+        else:
+            # Downscale number of visits based on 10-year depth
+            # assuming annual obs strategy is fixed
+            self.num_visits = self.num_visits_10_year*depth//10
 
-    def delta_C_m(self, band_index):
+    def _format_input_params(self):
+        """Convert param lists into arrays for vectorized computation
+
+        """
+        params_list = ['bands', 'm_skys', 'seeings', 'gammas']
+        params_list += ['k_ms', 'C_ms', 'delta_C_m_infs']
+        params_list += ['num_visits_10_year']
+        for key in params_list:
+            val = np.array(getattr(self, key)).reshape([1, -1])
+            setattr(self, key, val)
+
+    def calculate_delta_C_m(self, band_index):
         """Returns delta_C_m correction for num_visits > 1 (i.e. exposure times > 30s),
         following Eq 7 in Science Drivers.
         """
@@ -77,7 +126,7 @@ class ErrorSimulator:
             + 1.25 * np.log10(num_visit) - k_m * (self.airmass - 1)
         # print("m_5 pre delta_C_m", m_5)
         # print("delta_C_m(i)", self.delta_C_m(i))
-        m_5 += self.delta_C_m(i)
+        m_5 += self.calculate_delta_C_m(i)
 
         return m_5
 
@@ -112,7 +161,7 @@ class ErrorSimulator:
 
         # systematic photometric error
         sigma_sys = 0.005
-        return np.sqrt(sigma_sys ** 2 + sigma_rand_squared)  # adding errors in quadrature
+        return np.sqrt(sigma_sys**2 + sigma_rand_squared)  # adding errors in quadrature
 
     def get_sigmas(self, mags):
         calculate_photo_err_v = np.vectorize(self.calculate_photo_err)
@@ -122,11 +171,12 @@ class ErrorSimulator:
         # FIXME: take out np.vectorize()
 
     def __call__(self, x):
-        mags = x[:, self.mag_idx]  # FIXME: check this syntax
-        # mags: numpy array of shape (batch_size, 6) representing the true magnitudes where 6 is for ugrizy
+        mags = x[:, self.mag_idx]
+        # mags: numpy array of shape (batch_size, 6)
+        # representing the true magnitudes where 6 is for ugrizy
 
         sigmas = self.get_sigmas(mags)
-        mags += np.random.normal(loc=np.zeros((1, 6)), scale=sigmas)  # FIXME - loc shape
+        mags += np.random.normal(loc=np.zeros((1, 6)), scale=sigmas)  # FIXME: loc shape
         x[:, self.mag_idx] = mags
         return x
 
