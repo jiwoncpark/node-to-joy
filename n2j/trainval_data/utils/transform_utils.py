@@ -21,6 +21,18 @@ class Slicer:
         return x[:, self.feature_idx]
 
 
+def get_bands_in_x(x_cols):
+    mag_idx = []
+    which_bands = []
+    for bp in ['u', 'g', 'r', 'i', 'z', 'Y']:
+        mag_col = f'mag_{bp}_lsst'  # column name for mag in bp
+        if mag_col in x_cols:
+            which_bands.append(bp.lower())  # this bp was observed
+            idx_in_x_cols = x_cols.index(mag_col)  # index in x's dim 1
+            mag_idx.append(idx_in_x_cols)
+    return mag_idx, which_bands
+
+
 class MagErrorSimulator:
     bands = ['u', 'g', 'r', 'i', 'z', 'y']
 
@@ -84,8 +96,7 @@ class MagErrorSimulator:
         """
         self.mag_idx = mag_idx
         self.which_bands = which_bands
-        all_bands = list('ugrizy')
-        self.idx_in_ugrizy = [all_bands.index(b) for b in self.which_bands]
+        self.idx_in_ugrizy = [self.bands.index(b) for b in self.which_bands]
         self.depth = depth
         self.airmass = airmass
         # Overwrite band-dependent params
@@ -183,5 +194,3 @@ class MagErrorSimulator:
         mags += np.random.normal(loc=0.0, scale=sigmas)
         x[:, self.mag_idx] = mags
         return x
-
-        # FIXME: don't assume we have all ugrizy mags - add support for Nones

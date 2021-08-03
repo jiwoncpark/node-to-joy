@@ -1,6 +1,15 @@
 import unittest
 import numpy as np
-from n2j.trainval_data.utils.transform_utils import MagErrorSimulator
+from n2j.trainval_data.utils.transform_utils import (MagErrorSimulator,
+                                                     get_bands_in_x)
+
+
+def test_get_bands_in_x():
+    # Watch the 'Y' being uppercase
+    x_cols = ['froyo', 'madi', 'mag_i_lsst', 'jiwon', 'mag_Y_lsst']
+    mag_idx, which_bands = get_bands_in_x(x_cols)
+    np.testing.assert_equal(mag_idx, [2, 4])
+    np.testing.assert_equal(which_bands, ['i', 'y'])
 
 
 class TestMagErrorSimulator(unittest.TestCase):
@@ -100,17 +109,16 @@ class TestMagErrorSimulator(unittest.TestCase):
         np.testing.assert_equal(out_sigmas.shape, [1, 6])
         # Partial bands, scalar mag
         mes = MagErrorSimulator(mag_idx=None,  # doesn't matter here
-                                which_bands=['z', 'i', 'g'])  # default
+                                which_bands=['z', 'i', 'g'])
         in_mags = 22.0 + np.random.normal()
         out_sigmas = mes.get_sigmas(in_mags)
         np.testing.assert_equal(out_sigmas.shape, [1, 3])
         # Partial bands, vector mag
         mes = MagErrorSimulator(mag_idx=None,  # doesn't matter here
-                                which_bands=['z', 'i', 'g'])  # default
+                                which_bands=['z', 'i', 'g'])
         in_mags = 22.0 + np.random.normal(size=[15, 3])
         out_sigmas = mes.get_sigmas(in_mags)
         np.testing.assert_equal(out_sigmas.shape, [15, 3])
-
 
     @classmethod
     def tearDownClass(cls):
@@ -118,4 +126,5 @@ class TestMagErrorSimulator(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    test_get_bands_in_x()
     unittest.main()
