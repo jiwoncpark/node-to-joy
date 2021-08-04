@@ -63,7 +63,7 @@ def get_gamma_maps(lens_model, nfw_kwargs, fov, save_path, kappa_diff,
 
 def get_concentration(halo_mass, stellar_mass,
                       m=-0.10, A=3.44, trans_M_ratio=430.49, c_0=3.19,
-                      seed=123):
+                      seed=123, add_noise=True):
     """Get the halo concentration from halo and stellar masses
     using the fit in Childs et al 2018 for all individual halos, both relaxed
     and unrelaxed
@@ -74,10 +74,14 @@ def get_concentration(halo_mass, stellar_mass,
         ratio of the transition mass to the stellar mass
 
     """
-    rg = np.random.default_rng(seed)
+    rg = np.random.default_rng()
     mass_ratio = halo_mass/stellar_mass
     b = trans_M_ratio  # trans mass / stellar mass
     c_200 = A*(((mass_ratio/b)**m)*((1.0 + (mass_ratio/b))**(-m)) - 1.0) + c_0
-    c_200 += rg.standard_normal(halo_mass.shape)*c_200/3.0
+    if add_noise:
+        if isinstance(halo_mass, np.ndarray):
+            c_200 += rg.standard_normal(halo_mass.shape)*c_200/3.0
+        else:  # float
+            c_200 += rg.standard_normal()*c_200/3.0
     c_200 = np.maximum(c_200, 1.0)
     return c_200

@@ -1,0 +1,16 @@
+# Comments
+section_0:
+  str_value: 'some_parent/some_dir'
+  int_list: [1, 2]
+  int_value: 1000
+  # Comments
+  str_list: ['str_element']
+  multiline_str_list: ['0', '1', '2', '3',
+                        '4', '5', '6',
+                        '7']
+# Comments
+section_1:
+  inside_dict:
+    float_value: 0.001
+    int_value: 1
+    null_value: null

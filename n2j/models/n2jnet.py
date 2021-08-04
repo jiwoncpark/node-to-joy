@@ -5,14 +5,30 @@ from torch.nn import (Module, ModuleList, ReLU, LayerNorm,
                       Sequential as Seq, Linear as Lin)
 from torch_scatter import scatter_add
 from torch_geometric.nn import MetaLayer
-import torch
 from torch import nn
-from torch import optim
+import torch.nn.functional as F
 from n2j.models.flow import Flow, MAF, Perm
+from n2j.losses.gaussian_nll import DiagonalGaussianNLL
 
 
 __all__ = ['N2JNet']
 DEBUG = False
+
+
+class MCDropout(nn.Dropout):
+    """1D dropout that stays on during training and testing
+
+    """
+    def forward(self, input: Tensor) -> Tensor:
+        return F.dropout(input, self.p, True, self.inplace)
+
+
+class MCDropout2d(nn.Dropout2d):
+    """2D dropout that stays on during training and testing
+
+    """
+    def forward(self, input: Tensor) -> Tensor:
+        return F.dropout2d(input, self.p, True, self.inplace)
 
 
 class CustomMetaLayer(MetaLayer):
@@ -37,7 +53,34 @@ class CustomMetaLayer(MetaLayer):
 class N2JNet(Module):
     def __init__(self, dim_in, dim_out_local, dim_out_global, dim_local, dim_global,
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
-                 global_flow=False, class_weight=torch.tensor([1.0, 1.0, 1.0, 1.0])):
+                 global_flow=False,
+                 dropout=0.0,
+                 class_weight=None):
+        """Edgeless graph neural network modeling relationships among nodes
+        and between nodes and global
+
+        Parameters
+        ----------
+        dim_in : int
+            number of input features per node
+        dim_out_local : int
+            number of targets per node
+        dim_out_global : int
+            number of targets per graph
+        dim_local : int
+        dim_global : int
+        dim_hidden : int
+        dim_pre_aggr : int
+        n_iter : int
+        n_out_layers : int
+        global_flow : bool
+        dropout : float
+            fraction of weights to zero during training and testing,
+            for MC dropout. Default: 0.0
+        class_weight : torch.tensor
+
+
+        """
         super(N2JNet, self).__init__()
         self.dim_in = dim_in
         self.dim_out_local = dim_out_local
@@ -50,27 +93,34 @@ class N2JNet(Module):
         self.n_out_layers = n_out_layers
         self.global_flow = global_flow
         self.class_weight = class_weight
+        self.dropout = dropout
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_local),
                                  LayerNorm(self.dim_local))
         # MLPs for encoding local and global
         meta_layers = ModuleList()
         for i in range(self.n_iter):
-            node_model = NodeModel(self.dim_local, self.dim_global, self.dim_hidden)
+            node_model = NodeModel(self.dim_local, self.dim_global,
+                                   self.dim_hidden, self.dropout)
             global_model = GlobalModel(self.dim_local, self.dim_global,
-                                       self.dim_hidden, self.dim_pre_aggr)
+                                       self.dim_hidden, self.dim_pre_aggr,
+                                       self.dropout)
             meta = CustomMetaLayer(node_model=node_model, global_model=global_model)
             meta_layers.append(meta)
         self.meta_layers = meta_layers
         # Networks for local and global output
         self.net_out_local = Seq(Lin(self.dim_local, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_out_local*2))
         if self.global_flow:
             self.net_out_global = Flow(*[[
@@ -80,9 +130,14 @@ class N2JNet(Module):
         else:
             self.net_out_global = Seq(Lin(self.dim_global, self.dim_hidden),
                                       ReLU(),
+                                      MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_hidden),
                                       ReLU(),
+                                      MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_out_global*2))
+        # Losses
+        self.local_nll = DiagonalGaussianNLL(dim_out_local)
+        self.global_nll = DiagonalGaussianNLL(dim_out_global)
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
@@ -105,10 +160,7 @@ class N2JNet(Module):
 
     def local_loss(self, x, data):
         y_local = data.y_local  # [n_nodes, 2]
-        mu_local, logvar_local = torch.split(x, self.dim_out_local, dim=-1)
-        precision_local = torch.exp(-logvar_local)
-        nlogp_local = precision_local * (y_local - mu_local)**2.0 + logvar_local  # [n_nodes, 2]
-        nlogp_local = nlogp_local.mean(dim=-1)  # [n_nodes,]
+        nlogp_local = self.local_nll(x, y_local)  # [n_nodes,]
         return nlogp_local
 
     def global_loss(self, u, data):
@@ -118,14 +170,11 @@ class N2JNet(Module):
             if DEBUG:
                 print("u_out", torch.any(torch.isnan(u_out)), u_out.mean())
                 print("log_det", torch.any(torch.isnan(log_det)), log_det.mean())
-            log_prob = -u_out.pow(2).sum(1)/2
+            log_prob = -u_out.pow(2).sum(1)/2  # Standard normal base dist
             normalized_log_prob = log_prob + log_det
             nlogp_global = - normalized_log_prob  # [batch_size,]
         else:
-            mu_global, logvar_global = torch.split(u, self.dim_out_global, dim=-1)
-            precision_global = torch.exp(-logvar_global)
-            nlogp_global = precision_global * (y - mu_global)**2.0 + logvar_global
-            nlogp_global = nlogp_global.mean(dim=-1)  # [batch_size,]
+            nlogp_global = self.global_nll(u, y)  # [batch_size,]
         return nlogp_global
 
     def loss(self, x, u, data):
@@ -133,26 +182,32 @@ class N2JNet(Module):
         local_loss = scatter_add(local_loss, data.batch, dim=0)  # [batch_size,]
         global_loss = self.global_loss(u, data)  # [batch_size,]
         # Weight by inverse class number counts
-        y_weight = 1.0/self.class_weight[data.y_class].squeeze()
-        local_loss *= y_weight
-        global_loss *= y_weight
+        if self.class_weight is not None:
+            y_weight = 1.0/self.class_weight[data.y_class].squeeze()
+            local_loss *= y_weight
+            global_loss *= y_weight
         return local_loss.mean(), global_loss.mean()
 
 
 class NodeModel(Module):
+    def __init__(self, dim_local, dim_global, dim_hidden, dropout):
+        """MLP governing the node representation
 
-    def __init__(self, dim_local, dim_global, dim_hidden):
+        """
         super(NodeModel, self).__init__()
         self.dim_local = dim_local
         self.dim_global = dim_global
         self.dim_hidden = dim_hidden
         self.dim_concat = self.dim_local + self.dim_global
+        self.dropout = dropout
         self.mlp = Seq(Lin(self.dim_concat, self.dim_hidden),
                        LayerNorm(self.dim_hidden),
                        ReLU(),
+                       MCDropout(self.dropout),
                        Lin(self.dim_hidden, self.dim_hidden),
                        LayerNorm(self.dim_hidden),
                        ReLU(),
+                       MCDropout(self.dropout),
                        Lin(self.dim_hidden, self.dim_local),
                        LayerNorm(self.dim_local))
 
@@ -165,26 +220,35 @@ class NodeModel(Module):
 
 
 class GlobalModel(Module):
-    def __init__(self, dim_local, dim_global, dim_hidden, dim_pre_aggr):
+    def __init__(self, dim_local, dim_global, dim_hidden, dim_pre_aggr,
+                 dropout):
+        """MLP governing the global representation
+
+        """
         super(GlobalModel, self).__init__()
         self.dim_local = dim_local
         self.dim_global = dim_global
         self.dim_hidden = dim_hidden
         self.dim_concat = self.dim_local + self.dim_global
         self.dim_pre_aggr = dim_pre_aggr
+        self.dropout = dropout
 
         # MLP prior to aggregating node encodings
         self.mlp_pre_aggr = Seq(Lin(self.dim_concat, self.dim_hidden),
                                 ReLU(),
+                                MCDropout(self.dropout),
                                 Lin(self.dim_hidden, self.dim_hidden),
                                 ReLU(),
+                                MCDropout(self.dropout),
                                 Lin(self.dim_hidden, self.dim_pre_aggr),
                                 LayerNorm(self.dim_pre_aggr))
         # MLP after aggregating node encodings
         self.mlp_post_aggr = Seq(Lin(self.dim_pre_aggr+self.dim_global, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_hidden),
                                  ReLU(),
+                                 MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_global),
                                  LayerNorm(self.dim_global))
 

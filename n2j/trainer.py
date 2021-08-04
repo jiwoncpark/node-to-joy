@@ -1,4 +1,8 @@
+"""Class managing the model training
+
+"""
 import os
+import os.path as osp
 import random
 import datetime
 import json
@@ -8,11 +12,14 @@ import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-from torch.utils.data.sampler import WeightedRandomSampler
+from torch.utils.data.sampler import WeightedRandomSampler, SubsetRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
-from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
+from n2j.trainval_data.utils.transform_utils import (Standardizer,
+                                                     Slicer,
+                                                     MagErrorSimulatorTorch,
+                                                     get_bands_in_x)
 import matplotlib.pyplot as plt
 
 
@@ -33,12 +40,13 @@ def is_decreasing(arr):
 class Trainer:
 
     def __init__(self, device_type, checkpoint_dir='trained_models', seed=123):
-        self.device = torch.device(device_type)
+        self.device_type = device_type
+        self.device = torch.device(self.device_type)
         self.seed = seed
         self.seed_everything()
         self.checkpoint_dir = checkpoint_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.logger = SummaryWriter(os.path.join(self.checkpoint_dir, 'runs'))
+        self.logger = SummaryWriter(osp.join(self.checkpoint_dir, 'runs'))
         self.epoch = 0
         self.early_stop_crit = []
         self.last_saved_val_loss = np.inf
@@ -58,8 +66,25 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
-                     sub_features=None, sub_target=None, sub_target_local=None):
-        self.batch_size = batch_size
+                     sub_features=None, sub_target=None, sub_target_local=None,
+                     rebin=False, num_workers=2,
+                     noise_kwargs=dict(mag=dict(
+                                                override_kwargs=None,
+                                                depth=5,
+                                                )
+                                       )):
+        """Load dataset and dataloader for training or validation
+
+        Note
+        ----
+        Should be called for training data first, to set the normalizing stats
+        used for both training and validation!
+
+        """
+        if is_train:
+            self.batch_size = batch_size
+        else:
+            self.val_batch_size = batch_size
         # X metadata
         features = data_kwargs['features']
         self.sub_features = sub_features if sub_features else features
@@ -75,19 +100,26 @@ class Trainer:
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
-            if os.path.exists(os.path.join(self.checkpoint_dir, 'stats.pt')):
-                stats = torch.load(os.path.join(self.checkpoint_dir, 'stats.pt'))
+            if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
+                stats = torch.load(osp.join(self.checkpoint_dir, 'stats.pt'))
             else:
                 stats = self.train_dataset.data_stats
-                torch.save(stats, os.path.join(self.checkpoint_dir, 'stats.pt'))
+                torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
             if sub_features:
                 idx = get_idx(features, sub_features)
                 self.X_mean = stats['X_mean'][:, idx]
                 self.X_std = stats['X_std'][:, idx]
                 slicing = Slicer(idx)
+                mag_idx, which_bands = get_bands_in_x(sub_features)
+                print(f"Mag errors added to {which_bands}")
+                magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
+                                                which_bands=which_bands,
+                                                **noise_kwargs['mag'])
                 norming = Standardizer(self.X_mean, self.X_std)
-                self.transform_X = transforms.Compose([slicing, norming])
+                self.transform_X = transforms.Compose([slicing,
+                                                      magerr,
+                                                      norming])
             else:
                 self.X_mean = stats['X_mean']
                 self.X_std = stats['X_std']
@@ -108,40 +140,82 @@ class Trainer:
                 self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
                 self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
                 slicing_Y_local = Slicer(idx_Y_local)
-                norming_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                norming_Y_local = Standardizer(self.Y_local_mean,
+                                               self.Y_local_std)
                 self.transform_Y_local = transforms.Compose([slicing_Y_local,
                                                             norming_Y_local])
             else:
-                self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                self.transform_Y_local = Standardizer(self.Y_local_mean,
+                                                      self.Y_local_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
-            self.class_weight = stats['class_weight']
-            sampler = WeightedRandomSampler(stats['y_weight'],
-                                            num_samples=len(self.train_dataset))
-            self.train_loader = DataLoader(self.train_dataset,
-                                           batch_size=self.batch_size,
-                                           sampler=sampler,
-                                           num_workers=2,
-                                           drop_last=True)
-        else:
+            # Loading option 1: Subsample from a distribution
+            if data_kwargs['subsample_pdf_func'] is not None:
+                self.class_weight = None
+                sampler = SubsetRandomSampler(stats['subsample_idx'])
+                self.train_loader = DataLoader(self.train_dataset,
+                                               batch_size=batch_size,
+                                               sampler=sampler,
+                                               num_workers=num_workers,
+                                               drop_last=True)
+            else:
+                # Loading option 2: Over/undersample according to inverse frequency
+                if rebin:
+                    self.class_weight = stats['class_weight']
+                    sampler = WeightedRandomSampler(stats['y_weight'],
+                                                    num_samples=len(self.train_dataset))
+                    self.train_loader = DataLoader(self.train_dataset,
+                                                   batch_size=batch_size,
+                                                   sampler=sampler,
+                                                   num_workers=num_workers,
+                                                   drop_last=True)
+                # Loading option 3: No special sampling, just shuffle
+                else:
+                    self.class_weight = None
+                    self.train_loader = DataLoader(self.train_dataset,
+                                                   batch_size=batch_size,
+                                                   shuffle=True,
+                                                   num_workers=num_workers,
+                                                   drop_last=True)
+        else:  # validation
             self.val_dataset = dataset
             self.val_dataset.transform_X = self.transform_X
             self.val_dataset.transform_Y = self.transform_Y
             self.val_dataset.transform_Y_local = self.transform_Y_local
-            self.val_loader = DataLoader(self.val_dataset,
-                                         batch_size=self.batch_size,
-                                         shuffle=False,
-                                         num_workers=2,
-                                         drop_last=True)
+            # Compute or retrieve stats
+            stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
+            if osp.exists(stats_val_path):
+                stats_val = torch.load(stats_val_path)
+            else:
+                stats_val = self.val_dataset.data_stats_val
+                torch.save(stats_val, stats_val_path)
+            # Val loading option 1: Subsample from a distribution
+            if data_kwargs['subsample_pdf_func'] is not None:
+                self.class_weight = None
+                sampler = SubsetRandomSampler(stats_val['subsample_idx'])
+                self.val_loader = DataLoader(self.val_dataset,
+                                             batch_size=batch_size,
+                                             sampler=sampler,
+                                             num_workers=num_workers,
+                                             drop_last=True)
+            else:
+                # Val loading option 2: No special sampling, no shuffle
+                self.class_weight = None
+                self.val_loader = DataLoader(self.val_dataset,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             num_workers=num_workers,
+                                             drop_last=True)
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
         self.model_kwargs = model_kwargs
         self.model = getattr(models, model_name)(**self.model_kwargs)
         self.model.to(self.device)
-        self.model.class_weight = self.class_weight.to(self.device)
-        print(self.model.class_weight)
+        if self.class_weight is not None:
+            self.model.class_weight = self.class_weight.to(self.device)
+        print("class weight: ", self.model.class_weight)
         n_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"Number of params: {n_params}")
 
@@ -150,7 +224,7 @@ class Trainer:
 
         Parameters
         ----------
-        state_path : str or os.path object
+        state_path : str or osp.object
             path of the state dict to load
 
         """
@@ -189,7 +263,7 @@ class Trainer:
         time_fmt = "epoch={:d}_%m-%d-%Y_%H:%M".format(self.epoch)
         time_stamp = datetime.datetime.now().strftime(time_fmt)
         model_fname = '{:s}_{:s}.mdl'.format(self.model_name, time_stamp)
-        self.model_path = os.path.join(self.checkpoint_dir, model_fname)
+        self.model_path = osp.join(self.checkpoint_dir, model_fname)
         torch.save(state, self.model_path)
 
     def configure_optim(self, early_stop_memory=20,
@@ -235,7 +309,7 @@ class Trainer:
                                    epoch_i*n_batches + i)
         return train_loss
 
-    def train(self, n_epochs, eval_every=1, eval_on_train=False, sample_kwargs={}):
+    def train(self, n_epochs, sample_kwargs={}):
         self.model.train()
         # Training loop
         self.n_epochs = n_epochs
@@ -247,11 +321,6 @@ class Trainer:
             self.logger.add_scalars('metrics/loss',
                                     dict(train=train_loss_i, val=val_loss_i),
                                     epoch_i)
-            if False:
-                if (epoch_i+1) % eval_every == 0:
-                    if eval_on_train:
-                        self.eval_posterior(epoch_i, **sample_kwargs, on_train=True)
-                    self.eval_posterior(epoch_i, **sample_kwargs, on_train=False)
             self.epoch = epoch_i
             # Stop early if val loss doesn't decrease for 10 consecutive epochs
             self.early_stop_crit.append(val_loss_i)
@@ -260,7 +329,7 @@ class Trainer:
             if ~is_decreasing(self.early_stop_crit) and memory_filled:
                 break
             if val_loss_i < self.last_saved_val_loss:
-                os.remove(self.model_path) if os.path.exists(self.model_path) else None
+                os.remove(self.model_path) if osp.exists(self.model_path) else None
                 self.save_state(train_loss_i, val_loss_i)
                 self.last_saved_val_loss = val_loss_i
         self.logger.close()
@@ -282,6 +351,7 @@ class Trainer:
                 total_nll_global += (loss_global - total_nll_global)/(1.0+i)  # [1,]
             self.logger.add_scalar('val_nll_local', total_nll_local.item(), epoch_i)
             self.logger.add_scalar('val_nll_kappa', total_nll_global.item(), epoch_i)
+            # Make plots on the last batch
             if self.model.global_flow:
                 self._log_kappa_recovery_flow(epoch_i, x, u, batch.y)
             else:
@@ -312,87 +382,13 @@ class Trainer:
         # Plot
         fig, ax = plt.subplots()
         ax.errorbar(y, y=mu_global_pred, yerr=sig_global_pred,
-                    marker='.', fmt='o')
+                    fmt='o')
         interval = np.linspace(np.min(y), np.max(y), 20)
         ax.plot(interval, interval, linestyle='--')
         ax.set_xlabel(r"True kappa")
         ax.set_ylabel(r"Pred kappa")
         self.logger.add_figure('kappa recovery', fig, global_step=epoch_i)
         plt.close('all')
-
-    def eval_posterior(self, epoch_i, n_samples=200, n_mc_dropout=20,
-                       on_train=False):
-        # Fetch precomputed Y_mean, Y_std to de-standardize samples
-        Y_mean = self.Y_mean.to(self.device)
-        Y_std = self.Y_std.to(self.device)
-        if on_train:
-            loader = self.train_loader
-            prefix = 'train'
-            n_mc_dropout = 1
-            n_samples = 1
-        else:
-            loader = self.val_loader
-            prefix = 'val'
-        B = self.batch_size  # for convenience
-        n_data = len(loader)*B
-        self.model.eval()
-        with torch.no_grad():
-            samples = np.empty([n_data,
-                               n_mc_dropout,
-                               n_samples,
-                               self.Y_dim])
-            y_unnormed = np.empty([n_data, self.Y_dim])
-            edge_index_list = []
-            w_list = []
-            for i, batch in enumerate(loader):
-                batch = batch.to(self.device)
-                # Get ground truth
-                y_unnormed[i*B: (i+1)*B, :] = (batch.y*Y_std + Y_mean).cpu().numpy()
-                for mc_iter in range(n_mc_dropout):
-                    out, (edge_index, w) = self.model(batch)
-                    # Get pred samples
-                    self.loss_obj.set_trained_pred(out)
-                    if 'Double' in self.loss_type:
-                        self.logger.add_histogram('{:s}/w2'.format(prefix),
-                                                  self.loss_obj.w2, epoch_i)
-                        mc_samples = self.loss_obj.sample(Y_mean,
-                                                          Y_std,
-                                                          n_samples,
-                                                          sample_seed=self.seed)
-                    samples[i*B: (i+1)*B, mc_iter, :, :] = mc_samples
-                edge_index_list.append(edge_index.detach().cpu().numpy())
-                w_list.append(w.detach().cpu().numpy())
-        samples = samples.transpose(0, 3, 1, 2).reshape([n_data, self.Y_dim, -1])
-        self.log_metrics(epoch_i, samples, y_unnormed, prefix)
-        summary = dict(samples=samples,
-                       y_val=y_unnormed,
-                       batch=batch.batch.detach().cpu().numpy(),
-                       edge_index=np.concatenate(edge_index_list, axis=1),
-                       w=np.concatenate(w_list, axis=0)
-                       )
-        return summary
-
-    def log_metrics(self, epoch_i, samples, y_val, prefix):
-        # Log metrics on pred
-        mean_pred = np.mean(samples, axis=-1)  # [batch_size, Y_dim]
-        std_pred = np.std(samples, axis=-1)
-        prec = np.abs(std_pred)
-        err = np.abs((mean_pred - y_val))
-        z = ((mean_pred - y_val)/(std_pred + 1.e-7))
-        for i, name in enumerate(self.sub_target):
-            self.logger.add_scalars('{:s}/metrics/{:s}'.format(prefix, name),
-                                    dict(med_ae=np.median(err, axis=0)[i],
-                                         med_prec=np.median(prec, axis=0)[i]),
-                                    epoch_i)
-            self.logger.add_histogram('{:s}/prec/{:s}'.format(prefix, name),
-                                      prec[:, i],
-                                      epoch_i)
-            self.logger.add_histogram('{:s}/MAE/{:s}'.format(prefix, name),
-                                      err[:, i],
-                                      epoch_i)
-            self.logger.add_histogram('{:s}/z/{:s}'.format(prefix, name),
-                                      z[:, i],
-                                      epoch_i)
 
     def __repr__(self):
         keys = ['X_dim', 'sub_features', 'sub_target', 'Y_dim', 'out_dim']
