@@ -9,7 +9,7 @@ cat << EOF > prepare-env-${1}.sl
 #SBATCH -J data_gen_${1}
 #SBATCH -C knl
 #SBATCH --nodes=1
-#SBATCH --time=08:00:00
+#SBATCH --time=07:00:00
 #SBATCH --qos=regular
 
 srun python generate_data_any.py ${1}
