@@ -9,6 +9,10 @@
 *.png
 n2j/data/
 
+# NERSC
+*.sl
+*.out
+
 # HTML builds
 docs/_build/*
 

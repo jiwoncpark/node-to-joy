@@ -12,7 +12,7 @@ from n2j.trainer import Trainer
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('healpix_id',
-                        help='healpix ID of CosmoDC2')
+                        help='healpix ID of CosmoDC2', type=int)
     args = parser.parse_args()
     IN_DIR = '/global/cscratch1/sd/jwp/n2j/data'  # where raw data lies
     TRAIN_HP = [args.healpix_id] #, 10198, 10072, 10071, 10070, 9943, 9942, 9816, 9815, 9814, 9687, 9686, 9559, 10450, 10327, 10326, 10200]
