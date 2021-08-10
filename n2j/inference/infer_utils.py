@@ -146,17 +146,45 @@ def get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
 def log_prob_mcmc(omega, log_p_k_given_omega_func, log_p_k_given_omega_int):
     """Evaluate the MCMC objective
 
+    Parameters
+    ----------
+    omega : list
+        Current MCMC sample of [mu, log_sigma] = Omega
+    log_p_k_given_omega_func : callable
+        function that returns p(k|Omega) of shape [n_test, n_samples]
+        for given omega and k fixed to be the BNN samples
+    log_p_k_given_omega_int : np.ndarray
+        Values of p(k|Omega_int) of shape [n_test, n_samples] for k
+        fixed to be the BNN samples
+
+    Returns
+    -------
+    float
+        Description
+
     """
     log_p_k_given_omega = log_p_k_given_omega_func(omega[0], omega[1])
     log_ratio = log_p_k_given_omega - log_p_k_given_omega_int  # [n_test, n_samples]
-    summed_over_samples = special.logsumexp(log_ratio, axis=1)  # [n_test,]
+    n_test, n_samples = log_ratio.shape
+    mean_over_samples = special.logsumexp(log_ratio,
+                                          b=1.0/n_samples,
+                                          axis=1)  # [n_test,]
     assert not np.isnan(log_p_k_given_omega_int).any()
     assert not np.isinf(log_p_k_given_omega_int).any()
-    return summed_over_samples.mean()  # averaged over sightlines
+    log_prob = mean_over_samples.sum()  # summed over sightlines
+    # log_prob = log_prob - n_test*np.log(n_samples)  # normalization
+    return log_prob
 
 
 def get_mcmc_samples(chain_path, chain_kwargs):
     """Load the samples from saved MCMC run
+
+    Parameters
+    ----------
+    chain_path : str
+        Path to the stored chain
+    chain_kwargs : dict
+        Options for chain postprocessing, including flat, thin, discard
 
     Returns
     -------
