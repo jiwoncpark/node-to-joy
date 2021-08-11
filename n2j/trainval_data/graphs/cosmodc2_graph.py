@@ -27,11 +27,41 @@ class CosmoDC2Graph(ConcatDataset):
     """
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
                  n_data, features, subsample_pdf_func=None,
+                 n_subsample=None,
                  stop_mean_std_early=False, n_cores=20):
+        """Summary
+
+        Parameters
+        ----------
+        in_dir : TYPE
+            Description
+        healpixes : TYPE
+            Description
+        raytracing_out_dirs : TYPE
+            Description
+        aperture_size : TYPE
+            Description
+        n_data : TYPE
+            Description
+        features : TYPE
+            Description
+        subsample_pdf_func : callable, optional
+            Function that evaluates the target subsampling PDF
+        n_subsample : int, optional
+            How many examples to subsample, to form the final effective
+            dataset size. Required if subsample_pdf_func is not None.
+        stop_mean_std_early : bool, optional
+            Description
+        n_cores : int, optional
+            Description
+        """
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
         self.n_cores = n_cores
         self.subsample_pdf_func = subsample_pdf_func
+        if self.subsample_pdf_func is not None:
+            assert n_subsample is not None
+        self.n_subsample = n_subsample
         datasets = []
         Y_list = []
         for i in range(self.n_datasets):
@@ -108,7 +138,8 @@ class CosmoDC2Graph(ConcatDataset):
             p = subsample_weight/kde.pdf(y_values_orig)
             p /= np.sum(p)
             subsample_idx = rng.choice(np.arange(len(y_values_orig)),
-                                       p=p, replace=True, size=len(y_values_orig))
+                                       p=p, replace=True,
+                                       size=self.n_subsample)
             subsample_idx = subsample_idx.tolist()
             sampler = SubsetRandomSampler(subsample_idx)
             sampling_loader = DataLoader(self,
@@ -136,13 +167,13 @@ class CosmoDC2Graph(ConcatDataset):
         return stats
 
     @cached_property
-    def data_stats_val(self):
+    def data_stats_valtest(self):
         """Statistics of the X, Y data on validation set used for
         resampling to mimic training dist.
         Mean, std computation skipped.
 
         """
-        print("Computing resampling stats for validation set...")
+        print("Computing resampling stats for val/test set...")
         B = 1000
         dummy_loader = DataLoader(self,  # val_dataset
                                   batch_size=B,
@@ -151,6 +182,7 @@ class CosmoDC2Graph(ConcatDataset):
                                   drop_last=False)
         # If subsample_pdf_func is None, don't need this attribute
         assert self.subsample_pdf_func is not None
+        assert self.n_subsample is not None
         torch.multiprocessing.set_sharing_strategy('file_system')
         y_values_orig = np.zeros(len(self))  # [n_val,]
         subsample_weight = np.zeros(len(self))  # [n_val,]
@@ -166,7 +198,8 @@ class CosmoDC2Graph(ConcatDataset):
         p = subsample_weight/kde.pdf(y_values_orig)
         p /= np.sum(p)
         subsample_idx = rng.choice(np.arange(len(y_values_orig)),
-                                   p=p, replace=True, size=len(y_values_orig))
+                                   p=p, replace=True,
+                                   size=self.n_subsample)
         subsample_idx = subsample_idx.tolist()
         stats_val = dict(subsample_idx=subsample_idx)
         return stats_val

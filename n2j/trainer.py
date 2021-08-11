@@ -77,10 +77,11 @@ class Trainer:
 
         Note
         ----
-        Should be called for training data first, to set the normalizing stats
-        used for both training and validation!
+        Should be called for training data first, to set the normalizing
+        stats used for both training and validation!
 
         """
+        self.num_workers = num_workers
         if is_train:
             self.batch_size = batch_size
         else:
@@ -98,6 +99,9 @@ class Trainer:
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
         dataset = CosmoDC2Graph(**data_kwargs)
+        ############
+        # Training #
+        ############
         if is_train:
             self.train_dataset = dataset
             if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
@@ -153,12 +157,14 @@ class Trainer:
             # Loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
-                sampler = SubsetRandomSampler(stats['subsample_idx'])
+                train_subset = torch.utils.data.Subset(self.train_dataset,
+                                                       stats['subsample_idx'])
+                self.train_dataset = train_subset
                 self.train_loader = DataLoader(self.train_dataset,
                                                batch_size=batch_size,
-                                               sampler=sampler,
-                                               num_workers=num_workers,
-                                               drop_last=True)
+                                               shuffle=True,
+                                               num_workers=self.num_workers,
+                                               drop_last=False)
             else:
                 # Loading option 2: Over/undersample according to inverse frequency
                 if rebin:
@@ -168,7 +174,7 @@ class Trainer:
                     self.train_loader = DataLoader(self.train_dataset,
                                                    batch_size=batch_size,
                                                    sampler=sampler,
-                                                   num_workers=num_workers,
+                                                   num_workers=self.num_workers,
                                                    drop_last=True)
                 # Loading option 3: No special sampling, just shuffle
                 else:
@@ -176,37 +182,46 @@ class Trainer:
                     self.train_loader = DataLoader(self.train_dataset,
                                                    batch_size=batch_size,
                                                    shuffle=True,
-                                                   num_workers=num_workers,
+                                                   num_workers=self.num_workers,
                                                    drop_last=True)
-        else:  # validation
+            print(f"Train dataset size: {len(self.train_dataset)}")
+        ##############
+        # Validation #
+        ##############
+        else:
             self.val_dataset = dataset
+            # Compute or retrieve stats necessary for resampling
+            # before setting any kind of transforms
+            if data_kwargs['subsample_pdf_func'] is not None:
+                stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
+                if osp.exists(stats_val_path):
+                    stats_val = torch.load(stats_val_path)
+                else:
+                    stats_val = self.val_dataset.data_stats_valtest
+                    torch.save(stats_val, stats_val_path)
             self.val_dataset.transform_X = self.transform_X
             self.val_dataset.transform_Y = self.transform_Y
             self.val_dataset.transform_Y_local = self.transform_Y_local
-            # Compute or retrieve stats
-            stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
-            if osp.exists(stats_val_path):
-                stats_val = torch.load(stats_val_path)
-            else:
-                stats_val = self.val_dataset.data_stats_val
-                torch.save(stats_val, stats_val_path)
             # Val loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
-                sampler = SubsetRandomSampler(stats_val['subsample_idx'])
+                val_subset = torch.utils.data.Subset(self.val_dataset,
+                                                     stats_val['subsample_idx'])
+                self.val_dataset = val_subset
                 self.val_loader = DataLoader(self.val_dataset,
                                              batch_size=batch_size,
-                                             sampler=sampler,
-                                             num_workers=num_workers,
-                                             drop_last=True)
+                                             shuffle=False,
+                                             num_workers=self.num_workers,
+                                             drop_last=False)
             else:
                 # Val loading option 2: No special sampling, no shuffle
                 self.class_weight = None
                 self.val_loader = DataLoader(self.val_dataset,
                                              batch_size=batch_size,
                                              shuffle=False,
-                                             num_workers=num_workers,
+                                             num_workers=self.num_workers,
                                              drop_last=True)
+            print(f"Val dataset size: {len(self.val_dataset)}")
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name

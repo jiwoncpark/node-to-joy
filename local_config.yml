@@ -11,7 +11,11 @@ data:
   train_hp: [10327]
   val_hp: [10450]
   n_train: [20000]
-  n_val: [1000]
+  # Final effective training set size
+  n_subsample_train: 1000
+  n_val: [20000]
+  # Final effective val set size
+  n_subsample_val: 100
   batch_size: 1000
   val_batch_size: 1000
   num_workers: 4
@@ -78,8 +82,8 @@ inference_manager:
   seed: 1028
 test_data:
   test_hp: [10326]
-  n_test_pre_subsample: [50000]
-  n_test: [100]
+  n_test: [50000]
+  n_subsample_test: 100
   batch_size: 100
   dist_name: 'norm'
   dist_kwargs:
