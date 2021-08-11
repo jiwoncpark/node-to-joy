@@ -2,6 +2,7 @@
 
 """
 import os
+import os.path as osp
 import random
 import datetime
 import json
@@ -18,6 +19,10 @@ from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
 import n2j.inference.infer_utils as iutils
 import matplotlib.pyplot as plt
 import corner
+from n2j.trainval_data.utils.transform_utils import (Standardizer,
+                                                     Slicer,
+                                                     MagErrorSimulatorTorch,
+                                                     get_bands_in_x)
 
 
 def get_idx(orig_list, sub_list):
@@ -63,14 +68,19 @@ class InferenceManager:
 
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
-                     rebin=False, num_workers=2):
+                     rebin=False, num_workers=2,
+                     noise_kwargs=dict(mag=dict(
+                                                override_kwargs=None,
+                                                depth=5,
+                                                )
+                                       )):
         """Load training and test datasets
 
         """
         if is_train:
             self.batch_size = batch_size
         else:
-            self.test_batch_size = batch_size
+            self.val_batch_size = batch_size
         self.num_workers = num_workers
         # X metadata
         features = data_kwargs['features']
@@ -87,19 +97,26 @@ class InferenceManager:
         dataset = CosmoDC2Graph(**data_kwargs)
         if is_train:
             self.train_dataset = dataset
-            if os.path.exists(os.path.join(self.checkpoint_dir, 'stats.pt')):
-                stats = torch.load(os.path.join(self.checkpoint_dir, 'stats.pt'))
+            if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
+                stats = torch.load(osp.join(self.checkpoint_dir, 'stats.pt'))
             else:
                 stats = self.train_dataset.data_stats
-                torch.save(stats, os.path.join(self.checkpoint_dir, 'stats.pt'))
+                torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
             if sub_features:
                 idx = get_idx(features, sub_features)
                 self.X_mean = stats['X_mean'][:, idx]
                 self.X_std = stats['X_std'][:, idx]
                 slicing = Slicer(idx)
+                mag_idx, which_bands = get_bands_in_x(sub_features)
+                print(f"Mag errors added to {which_bands}")
+                magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
+                                                which_bands=which_bands,
+                                                **noise_kwargs['mag'])
                 norming = Standardizer(self.X_mean, self.X_std)
-                self.transform_X = transforms.Compose([slicing, norming])
+                self.transform_X = transforms.Compose([slicing,
+                                                      magerr,
+                                                      norming])
             else:
                 self.X_mean = stats['X_mean']
                 self.X_std = stats['X_std']
@@ -120,11 +137,13 @@ class InferenceManager:
                 self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
                 self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
                 slicing_Y_local = Slicer(idx_Y_local)
-                norming_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                norming_Y_local = Standardizer(self.Y_local_mean,
+                                               self.Y_local_std)
                 self.transform_Y_local = transforms.Compose([slicing_Y_local,
                                                             norming_Y_local])
             else:
-                self.transform_Y_local = Standardizer(self.Y_local_mean, self.Y_local_std)
+                self.transform_Y_local = Standardizer(self.Y_local_mean,
+                                                      self.Y_local_std)
             self.train_dataset.transform_X = self.transform_X
             self.train_dataset.transform_Y = self.transform_Y
             self.train_dataset.transform_Y_local = self.transform_Y_local
@@ -133,7 +152,7 @@ class InferenceManager:
                 self.class_weight = None
                 sampler = SubsetRandomSampler(stats['subsample_idx'])
                 self.train_loader = DataLoader(self.train_dataset,
-                                               batch_size=self.batch_size,
+                                               batch_size=batch_size,
                                                sampler=sampler,
                                                num_workers=self.num_workers,
                                                drop_last=True)
@@ -144,7 +163,7 @@ class InferenceManager:
                     sampler = WeightedRandomSampler(stats['y_weight'],
                                                     num_samples=len(self.train_dataset))
                     self.train_loader = DataLoader(self.train_dataset,
-                                                   batch_size=self.batch_size,
+                                                   batch_size=batch_size,
                                                    sampler=sampler,
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
@@ -152,41 +171,63 @@ class InferenceManager:
                 else:
                     self.class_weight = None
                     self.train_loader = DataLoader(self.train_dataset,
-                                                   batch_size=self.batch_size,
+                                                   batch_size=batch_size,
                                                    shuffle=True,
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
-        else:
+        else:  # validation
             self.test_dataset = dataset
             self.test_dataset.transform_X = self.transform_X
             self.test_dataset.transform_Y = self.transform_Y
             self.test_dataset.transform_Y_local = self.transform_Y_local
-            self.test_loader = DataLoader(self.test_dataset,
-                                          batch_size=self.test_batch_size,
-                                          shuffle=False,
-                                          num_workers=self.num_workers,
-                                          drop_last=True)
+            # Val loading option 1: Subsample from a distribution
+            if data_kwargs['subsample_pdf_func'] is not None:
+                # Compute or retrieve stats
+                stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
+                if osp.exists(stats_val_path):
+                    stats_val = torch.load(stats_val_path)
+                else:
+                    stats_val = self.test_dataset.data_stats_val
+                torch.save(stats_val, stats_val_path)
+                self.class_weight = None
+                sampler = SubsetRandomSampler(stats_val['subsample_idx'])
+                self.test_loader = DataLoader(self.test_dataset,
+                                              batch_size=batch_size,
+                                              sampler=sampler,
+                                              num_workers=self.num_workers,
+                                              drop_last=True)
+            else:
+                # Val loading option 2: No special sampling, no shuffle
+                self.class_weight = None
+                self.test_loader = DataLoader(self.test_dataset,
+                                              batch_size=batch_size,
+                                              shuffle=False,
+                                              num_workers=self.num_workers,
+                                              drop_last=True)
 
     def reset_test_dataset(self, subsample_pdf_func, n_test):
         """Reset test loader to follow the specified distribution
 
         """
         rng = np.random.default_rng(123)
-        y_test = self.get_true_kappa(is_train=False, add_suffix='orig').squeeze()
-        subsample_idx_path = os.path.join(self.out_dir, 'subsample_idx.npy')
-        if os.path.exists(subsample_idx_path):
+        y_test_orig = self.get_true_kappa(is_train=False,
+                                          add_suffix='orig').squeeze()
+        subsample_idx_path = osp.join(self.out_dir, 'subsample_idx.npy')
+        if osp.exists(subsample_idx_path):
             subsample_idx = np.load(subsample_idx_path).tolist()
         else:
             print("Evaluating the resampling density...")
-            print(f"on test set of size {len(y_test)}")
-            kde = scipy.stats.gaussian_kde(y_test, bw_method='scott')
-            p = subsample_pdf_func(y_test)/kde.pdf(y_test)
+            print(f"on test set of size {len(y_test_orig)}")
+            kde = scipy.stats.gaussian_kde(y_test_orig, bw_method='scott')
+            p = subsample_pdf_func(y_test_orig)/kde.pdf(y_test_orig)
             p /= np.sum(p)
-            subsample_idx = rng.choice(np.arange(len(y_test)),
-                                       p=p, replace=False, size=n_test)
+            subsample_idx = rng.choice(np.arange(len(y_test_orig)),
+                                       p=p, replace=True,
+                                       size=sum(n_test))
             subsample_idx = subsample_idx.tolist()
             np.save(subsample_idx_path, subsample_idx)
-        test_subset = torch.utils.data.Subset(self.test_dataset, subsample_idx)
+        test_subset = torch.utils.data.Subset(self.test_dataset,
+                                              subsample_idx)
         self.test_dataset = test_subset
         self.test_loader = DataLoader(self.test_dataset,
                                       batch_size=self.batch_size,
@@ -240,8 +281,8 @@ class InferenceManager:
         np.array of shape `[n_test, self.Y_dim, n_samples*n_mc_dropout]`
 
         """
-        path = os.path.join(self.out_dir, 'k_bnn.npy')
-        if os.path.exists(path):
+        path = osp.join(self.out_dir, 'k_bnn.npy')
+        if osp.exists(path):
             samples = np.load(path)
             return samples
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
@@ -282,10 +323,11 @@ class InferenceManager:
             loader = self.test_loader
             suffix = 'test'
             n_data = len(self.test_dataset)
-        path = os.path.join(self.out_dir, f'k_{suffix}{add_suffix}.npy')
-        if os.path.exists(path):
+        path = osp.join(self.out_dir, f'k_{suffix}{add_suffix}.npy')
+        if osp.exists(path):
             true_kappa = np.load(path)
             return true_kappa
+        print(f"Saving 'k_{suffix}{add_suffix}.npy'...")
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
@@ -301,29 +343,72 @@ class InferenceManager:
             np.save(path, true_kappa)
         return true_kappa
 
-    def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout):
-        path = os.path.join(self.out_dir, 'log_p_k_given_omega_int.npy')
-        if os.path.exists(path):
+    def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout,
+                                    interim_pdf_func):
+        """Compute log(p_k|Omega_int) for BNN samples p_k
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of BNN samples per MC iterate per sightline
+        n_mc_dropout : int
+            Number of MC dropout iterates per sightline
+        interim_pdf_func : callable
+            Function that evaluates the PDF of the interim prior
+
+        Returns
+        -------
+        np.ndarray
+            Probabilities log(p_k|Omega_int) of
+            shape `[n_test, n_mc_dropout*n_samples]`
+        """
+        path = osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
+        if osp.exists(path):
             return np.load(path)
         k_train = self.get_true_kappa(is_train=True)
-        k_bnn = self.get_bnn_kappa(n_samples=n_samples, n_mc_dropout=n_mc_dropout)
-        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int(k_train=k_train.squeeze(),
-                                                                     k_bnn=k_bnn.squeeze())
+        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
+                                   n_mc_dropout=n_mc_dropout)
+        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=k_train.squeeze(),
+                                                                              k_bnn=k_bnn.squeeze(),
+                                                                              interim_pdf_func=interim_pdf_func)
         np.save(path, log_p_k_given_omega_int)
         return log_p_k_given_omega_int
 
-    def run_mcmc_for_omega_post(self, n_samples, n_mc_dropout, mcmc_kwargs,
+    def run_mcmc_for_omega_post(self, n_samples, n_mc_dropout,
+                                mcmc_kwargs, interim_pdf_func,
                                 bounds_lower=-np.inf, bounds_upper=np.inf):
-        k_bnn = self.get_bnn_kappa(n_samples=n_samples, n_mc_dropout=n_mc_dropout)
-        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples, n_mc_dropout)
+        """Run EMCEE to obtain the posterior on test hyperparams, omega
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of BNN samples per MC iterate per sightline
+        n_mc_dropout : int
+            Number of MC dropout iterates
+        mcmc_kwargs : dict
+            Config going into `infer_utils.run_mcmc`
+        bounds_lower : np.ndarray or float, optional
+            Lower bound for target quantities
+        bounds_upper : np.ndarray or float, optional
+            Upper bound for target quantities
+        """
+        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
+                                   n_mc_dropout=n_mc_dropout)
+        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
+                                                                   n_mc_dropout,
+                                                                   interim_pdf_func)
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
 
     def get_kappa_log_weights(self, idx, n_samples, n_mc_dropout,
-                              chain_path, chain_kwargs):
-        path = os.path.join(self.out_dir, f'log_weights_{idx}.npy')
-        k_bnn = self.get_bnn_kappa(n_samples=n_samples, n_mc_dropout=n_mc_dropout)
-        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples, n_mc_dropout)
+                              chain_path, chain_kwargs,
+                              interim_pdf_func):
+        path = osp.join(self.out_dir, f'log_weights_{idx}.npy')
+        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
+                                   n_mc_dropout=n_mc_dropout)
+        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
+                                                                   n_mc_dropout,
+                                                                   interim_pdf_func)
         omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
         log_weights = iutils.get_kappa_log_weights(k_bnn[idx, :],
                                                    omega_post_samples,
@@ -340,29 +425,30 @@ class InferenceManager:
         fig = corner.corner(omega_post_samples,
                             **corner_kwargs)
 
-        fig.savefig(os.path.join(self.out_dir, 'omega_post.pdf'))
+        fig.savefig(osp.join(self.out_dir, 'omega_post.pdf'))
 
     def visualize_kappa_post(self, idx, n_samples, n_mc_dropout,
-                             chain_path, chain_kwargs):
+                             chain_path, chain_kwargs, interim_pdf_func):
         log_weights = self.get_kappa_log_weights(idx,
                                                  n_samples,
                                                  n_mc_dropout,
                                                  chain_path,
-                                                 chain_kwargs)  # [n_samples]
+                                                 chain_kwargs,
+                                                 interim_pdf_func)  # [n_samples]
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout)  # [n_test, n_samples]
         true_k = self.get_true_kappa(is_train=False)
         fig, ax = plt.subplots()
         # Original posterior
-        bins = np.histogram_bin_edges(k_bnn[idx, :], bins='scott',)
-        ax.hist(k_bnn[idx, :],
+        bins = np.histogram_bin_edges(k_bnn[idx].squeeze(), bins='scott',)
+        ax.hist(k_bnn[idx].squeeze(),
                 histtype='step',
                 bins=bins,
                 density=True,
                 color='#8ca252',
                 label='original')
         # Reweighted posterior
-        ax.hist(k_bnn[idx, :],
+        ax.hist(k_bnn[idx].squeeze(),
                 histtype='step',
                 bins=25,
                 density=True,

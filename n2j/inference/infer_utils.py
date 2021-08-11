@@ -92,10 +92,13 @@ def get_chain_plot(samples, out_path='mcmc_chain.png'):
         ax.set_ylabel(labels[i])
         ax.yaxis.set_label_coords(-0.1, 0.5)
     axes[-1].set_xlabel("step number")
-    fig.savefig(out_path)
+    if out_path is None:
+        plt.show()
+    else:
+        fig.savefig(out_path)
 
 
-def get_log_p_k_given_omega_int(k_train, k_bnn):
+def get_log_p_k_given_omega_int_kde(k_train, k_bnn, kwargs=None):
     """Evaluate the log likelihood, log p(k|Omega_int),
     using kernel density estimation (KDE) on training kappa,
     on the BNN kappa samples of test sightlines
@@ -105,6 +108,8 @@ def get_log_p_k_given_omega_int(k_train, k_bnn):
     k_train : np.array of shape `[n_train]`
         kappa in the training set
     k_bnn : np.array of shape `[n_test, n_samples]`
+    kwargs : dict
+        currently unused, placeholder for symmetry with analytic version
 
     Returns
     -------
@@ -114,7 +119,33 @@ def get_log_p_k_given_omega_int(k_train, k_bnn):
     """
     kde = stats.gaussian_kde(k_train, bw_method='scott')
     log_p_k_given_omega_int = kde.pdf(k_bnn.reshape(-1)).reshape(k_bnn.shape)
-    log_p_k_given_omega_int = np.log(log_p_k_given_omega_int + 1.e-7)
+    log_p_k_given_omega_int = np.log(log_p_k_given_omega_int)
+    assert not np.isnan(log_p_k_given_omega_int).any()
+    assert not np.isinf(log_p_k_given_omega_int).any()
+    return log_p_k_given_omega_int
+
+
+def get_log_p_k_given_omega_int_analytic(k_train, k_bnn, interim_pdf_func):
+    """Evaluate the log likelihood, log p(k|Omega_int),
+    using kernel density estimation (KDE) on training kappa,
+    on the BNN kappa samples of test sightlines
+
+    Parameters
+    ----------
+    k_train : np.array of shape `[n_train]`
+        kappa in the training set
+    k_bnn : np.array of shape `[n_test, n_samples]`
+    interim_pdf_func : callable
+        function that evaluates the PDF of the interim prior
+
+    Returns
+    -------
+    np.array of shape `[n_test, n_samples]`
+        log p(k|Omega_int)
+
+    """
+    log_p_k_given_omega_int = interim_pdf_func(k_bnn)
+    log_p_k_given_omega_int = np.log(log_p_k_given_omega_int)
     assert not np.isnan(log_p_k_given_omega_int).any()
     assert not np.isinf(log_p_k_given_omega_int).any()
     return log_p_k_given_omega_int
@@ -165,9 +196,8 @@ def log_prob_mcmc(omega, log_p_k_given_omega_func, log_p_k_given_omega_int):
     """
     log_p_k_given_omega = log_p_k_given_omega_func(omega[0], omega[1])
     log_ratio = log_p_k_given_omega - log_p_k_given_omega_int  # [n_test, n_samples]
-    n_test, n_samples = log_ratio.shape
     mean_over_samples = special.logsumexp(log_ratio,
-                                          b=1.0/n_samples,
+                                          b=1.0/log_ratio.shape[-1],
                                           axis=1)  # [n_test,]
     assert not np.isnan(log_p_k_given_omega_int).any()
     assert not np.isinf(log_p_k_given_omega_int).any()
@@ -207,7 +237,7 @@ def get_kappa_log_weights(k_bnn, omega_post_samples, log_p_k_given_omega_int):
     log_p_k_given_omega_int : np.array of shape `[n_samples]`
 
     """
-    k_bnn = k_bnn[:, np.newaxis]  # [n_samples, 1]
+    k_bnn = k_bnn.reshape(-1, 1)  # [n_samples, 1]
     mu = omega_post_samples[:, 0].reshape([1, -1])  # [1, n_omega]
     log_sigma = omega_post_samples[:, 1].reshape([1, -1])  # [1, n_omega]
     num = get_normal_logpdf(x=k_bnn,

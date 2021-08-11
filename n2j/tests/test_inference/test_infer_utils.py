@@ -176,7 +176,6 @@ class TestInferUtils(unittest.TestCase):
 
         """
         # True omega (standard normal)
-        return
         true_mu = 0.0
         true_sigma = 1.0
         true_log_sigma = np.log(true_sigma)
@@ -191,13 +190,13 @@ class TestInferUtils(unittest.TestCase):
                                 size=[n_test, n_samples])  # [n_test, n_samples]
         # MCMC kwargs
         n_walkers = 10
-        n_run = 10
+        n_run = 200
         p0 = np.array([[true_mu, true_log_sigma]])
         p0 = p0 + np.random.randn(n_walkers, 2)*np.array([[0.1, 0.1]])
         mcmc_kwargs = dict(
                            p0=p0,
                            n_run=n_run,
-                           n_burn=10,
+                           n_burn=1000,
                            n_walkers=n_walkers,
                            chain_path=osp.join(self.out_dir,
                                                f'chain_{n_test}'),
@@ -208,8 +207,8 @@ class TestInferUtils(unittest.TestCase):
         # Run MCMC
         if not osp.exists(osp.join(self.out_dir, f'chain_{n_test}')):
             iutils.get_omega_post(k_bnn,
-                                  log_p_k_given_omega_int=np.ones([n_test,
-                                                                  n_samples]),
+                                  log_p_k_given_omega_int=np.zeros([n_test,
+                                                                   n_samples]),
                                   mcmc_kwargs=mcmc_kwargs,
                                   bounds_lower=-20.0,
                                   bounds_upper=20.0)
@@ -220,8 +219,16 @@ class TestInferUtils(unittest.TestCase):
                                                     ))
         np.testing.assert_array_equal(mcmc_samples.shape,
                                       [n_run*n_walkers, 2])
-        # print(np.median(mcmc_samples, axis=0))
-        # print(scipy.stats.median_abs_deviation(mcmc_samples, axis=0))
+        import corner
+        import matplotlib.pyplot as plt
+        corner.corner(mcmc_samples, truths=[0, 0], smooth=1.0,
+                      plot_contours=True,
+                      quantiles=[0.68, 0.95], show_titles=True)
+        plt.savefig('get_omega_post_test.png')
+        plt.close('all')
+        # plt.show()
+        print(np.median(mcmc_samples, axis=0))
+        print(scipy.stats.median_abs_deviation(mcmc_samples, axis=0))
 
     @classmethod
     def tearDownClass(cls):
