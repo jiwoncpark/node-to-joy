@@ -74,14 +74,19 @@ class InferenceManager:
                                                 depth=5,
                                                 )
                                        )):
-        """Load training and test datasets
+        """Load dataset and dataloader for training or validation
+
+        Note
+        ----
+        Should be called for training data first, to set the normalizing
+        stats used for both training and validation!
 
         """
+        self.num_workers = num_workers
         if is_train:
             self.batch_size = batch_size
         else:
             self.val_batch_size = batch_size
-        self.num_workers = num_workers
         # X metadata
         features = data_kwargs['features']
         self.sub_features = sub_features if sub_features else features
@@ -95,6 +100,9 @@ class InferenceManager:
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
         dataset = CosmoDC2Graph(**data_kwargs)
+        ############
+        # Training #
+        ############
         if is_train:
             self.train_dataset = dataset
             if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
@@ -150,12 +158,14 @@ class InferenceManager:
             # Loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
-                sampler = SubsetRandomSampler(stats['subsample_idx'])
+                train_subset = torch.utils.data.Subset(self.train_dataset,
+                                                       stats['subsample_idx'])
+                self.train_dataset = train_subset
                 self.train_loader = DataLoader(self.train_dataset,
                                                batch_size=batch_size,
-                                               sampler=sampler,
+                                               shuffle=True,
                                                num_workers=self.num_workers,
-                                               drop_last=True)
+                                               drop_last=False)
             else:
                 # Loading option 2: Over/undersample according to inverse frequency
                 if rebin:
@@ -175,66 +185,44 @@ class InferenceManager:
                                                    shuffle=True,
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
-        else:  # validation
+            print(f"Train dataset size: {len(self.train_dataset)}")
+        #################
+        # Test (or val) #
+        #################
+        else:
             self.test_dataset = dataset
+            # Compute or retrieve stats necessary for resampling
+            # before setting any kind of transforms
+            if data_kwargs['subsample_pdf_func'] is not None:
+                stats_test_path = osp.join(self.checkpoint_dir, 'stats_test.pt')
+                if osp.exists(stats_test_path):
+                    stats_test = torch.load(stats_test_path)
+                else:
+                    stats_test = self.test_dataset.data_stats_valtest
+                    torch.save(stats_test, stats_test_path)
             self.test_dataset.transform_X = self.transform_X
             self.test_dataset.transform_Y = self.transform_Y
             self.test_dataset.transform_Y_local = self.transform_Y_local
-            # Val loading option 1: Subsample from a distribution
+            # Test loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
-                # Compute or retrieve stats
-                stats_val_path = osp.join(self.checkpoint_dir, 'stats_val.pt')
-                if osp.exists(stats_val_path):
-                    stats_val = torch.load(stats_val_path)
-                else:
-                    stats_val = self.test_dataset.data_stats_val
-                torch.save(stats_val, stats_val_path)
                 self.class_weight = None
-                sampler = SubsetRandomSampler(stats_val['subsample_idx'])
+                test_subset = torch.utils.data.Subset(self.test_dataset,
+                                                      stats_test['subsample_idx'])
+                self.test_dataset = test_subset
                 self.test_loader = DataLoader(self.test_dataset,
                                               batch_size=batch_size,
-                                              sampler=sampler,
+                                              shuffle=False,
                                               num_workers=self.num_workers,
-                                              drop_last=True)
+                                              drop_last=False)
             else:
-                # Val loading option 2: No special sampling, no shuffle
+                # Test loading option 2: No special sampling, no shuffle
                 self.class_weight = None
                 self.test_loader = DataLoader(self.test_dataset,
                                               batch_size=batch_size,
                                               shuffle=False,
                                               num_workers=self.num_workers,
                                               drop_last=True)
-
-    def reset_test_dataset(self, subsample_pdf_func, n_test):
-        """Reset test loader to follow the specified distribution
-
-        """
-        rng = np.random.default_rng(123)
-        y_test_orig = self.get_true_kappa(is_train=False,
-                                          add_suffix='orig').squeeze()
-        subsample_idx_path = osp.join(self.out_dir, 'subsample_idx.npy')
-        if osp.exists(subsample_idx_path):
-            subsample_idx = np.load(subsample_idx_path).tolist()
-        else:
-            print("Evaluating the resampling density...")
-            print(f"on test set of size {len(y_test_orig)}")
-            kde = scipy.stats.gaussian_kde(y_test_orig, bw_method='scott')
-            p = subsample_pdf_func(y_test_orig)/kde.pdf(y_test_orig)
-            p /= np.sum(p)
-            subsample_idx = rng.choice(np.arange(len(y_test_orig)),
-                                       p=p, replace=True,
-                                       size=sum(n_test))
-            subsample_idx = subsample_idx.tolist()
-            np.save(subsample_idx_path, subsample_idx)
-        test_subset = torch.utils.data.Subset(self.test_dataset,
-                                              subsample_idx)
-        self.test_dataset = test_subset
-        self.test_loader = DataLoader(self.test_dataset,
-                                      batch_size=self.batch_size,
-                                      shuffle=False,
-                                      num_workers=self.num_workers,
-                                      drop_last=False)
-        print(f"The test dataset now has size {n_test}")
+            print(f"Test dataset size: {len(self.test_dataset)}")
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
@@ -306,12 +294,6 @@ class InferenceManager:
         samples = samples.transpose(0, 3, 1, 2).reshape([n_test, self.Y_dim, -1])
         np.save(path, samples)
         return samples
-
-    def get_summary_metrics(self):
-        """Calculate summarizing metrics
-
-        """
-        pass
 
     def get_true_kappa(self, is_train, add_suffix='', save=True):
         # Decide which dataset we're collecting kappa labels for

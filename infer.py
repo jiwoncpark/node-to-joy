@@ -22,6 +22,7 @@ if __name__ == '__main__':
                                 n_data=cfg['data']['n_train'],
                                 aperture_size=1.0,
                                 subsample_pdf_func=norm_obj.pdf,
+                                n_subsample=cfg['data']['n_subsample_train'],
                                 stop_mean_std_early=False,
                                 in_dir=cfg['data']['in_dir']),
                            sub_features=cfg['data']['sub_features'],
@@ -33,15 +34,17 @@ if __name__ == '__main__':
                            rebin=False,
                            noise_kwargs=cfg['data']['noise_kwargs']
                            )
-    # Load test set with no subsampling (subsample_pdf_func=None)
+    # Load test set
+    norm_obj_test = getattr(stats, cfg['test_data']['dist_name'])(**cfg['test_data']['dist_kwargs'])
     test_raytracing = [os.path.join(cfg['data']['in_dir'],
                                     f'cosmodc2_{hp}/Y_{hp}') for hp in cfg['test_data']['test_hp']]
     infer_obj.load_dataset(dict(features=cfg['data']['features'],
                                 raytracing_out_dirs=test_raytracing,
                                 healpixes=cfg['test_data']['test_hp'],
-                                n_data=cfg['test_data']['n_test_pre_subsample'],
+                                n_data=cfg['test_data']['n_test'],
                                 aperture_size=1.0,
-                                subsample_pdf_func=None,
+                                subsample_pdf_func=norm_obj_test.pdf,
+                                n_subsample=cfg['test_data']['n_subsample_test'],
                                 in_dir=cfg['data']['in_dir']),
                            sub_features=cfg['data']['sub_features'],
                            sub_target=cfg['data']['sub_target'],
@@ -50,10 +53,6 @@ if __name__ == '__main__':
                            batch_size=cfg['test_data']['batch_size'],
                            noise_kwargs=cfg['data']['noise_kwargs']
                            )
-    # Redefine test data to be the subset
-    norm_obj_test = getattr(stats, cfg['test_data']['dist_name'])(**cfg['test_data']['dist_kwargs'])
-    infer_obj.reset_test_dataset(norm_obj_test.pdf, n_test=cfg['test_data']['n_test'])
-
     # Define model
     model_kwargs = dict(
                         dim_in=len(cfg['data']['sub_features']),
