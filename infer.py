@@ -31,24 +31,25 @@ if __name__ == '__main__':
                            batch_size=cfg['data']['batch_size'],
                            num_workers=cfg['data']['num_workers'],
                            rebin=False,
+                           noise_kwargs=cfg['data']['noise_kwargs']
                            )
-    # Load test set
-    # FIXME: must be run after train
+    # Load test set with no subsampling (subsample_pdf_func=None)
     test_raytracing = [os.path.join(cfg['data']['in_dir'],
                                     f'cosmodc2_{hp}/Y_{hp}') for hp in cfg['test_data']['test_hp']]
-    infer_obj.load_dataset(
-                           dict(features=cfg['data']['features'],
+    infer_obj.load_dataset(dict(features=cfg['data']['features'],
                                 raytracing_out_dirs=test_raytracing,
                                 healpixes=cfg['test_data']['test_hp'],
-                                n_data=cfg['test_data']['n_test'],
+                                n_data=cfg['test_data']['n_test_pre_subsample'],
                                 aperture_size=1.0,
+                                subsample_pdf_func=None,
                                 in_dir=cfg['data']['in_dir']),
                            sub_features=cfg['data']['sub_features'],
                            sub_target=cfg['data']['sub_target'],
                            sub_target_local=cfg['data']['sub_target_local'],
                            is_train=False,
                            batch_size=cfg['test_data']['batch_size'],
-                          )
+                           noise_kwargs=cfg['data']['noise_kwargs']
+                           )
     # Redefine test data to be the subset
     norm_obj_test = getattr(stats, cfg['test_data']['dist_name'])(**cfg['test_data']['dist_kwargs'])
     infer_obj.reset_test_dataset(norm_obj_test.pdf, n_test=cfg['test_data']['n_test'])
@@ -76,6 +77,7 @@ if __name__ == '__main__':
         infer_obj.run_mcmc_for_omega_post(n_samples=50,
                                           n_mc_dropout=20,
                                           mcmc_kwargs=mcmc_kwargs,
+                                          interim_pdf_func=norm_obj.pdf,
                                           bounds_lower=np.array([-0.5, -10]),
                                           bounds_upper=np.array([1.5, 0])
                                           )

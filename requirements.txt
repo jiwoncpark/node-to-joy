@@ -12,3 +12,4 @@ healpy
 emcee
 pyyaml
 corner
+h5py
