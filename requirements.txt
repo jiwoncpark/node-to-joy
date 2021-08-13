@@ -13,3 +13,4 @@ emcee
 pyyaml
 corner
 h5py
+addict
