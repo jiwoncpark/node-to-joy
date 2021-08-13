@@ -11,11 +11,10 @@ from tqdm import tqdm
 import scipy.stats
 import torch
 import torchvision.transforms as transforms
-from torch.utils.data.sampler import WeightedRandomSampler, SubsetRandomSampler
+from torch.utils.data.sampler import WeightedRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
-from n2j.trainval_data.utils.transform_utils import Standardizer, Slicer
 import n2j.inference.infer_utils as iutils
 import matplotlib.pyplot as plt
 import corner
@@ -23,6 +22,7 @@ from n2j.trainval_data.utils.transform_utils import (Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
                                                      get_bands_in_x)
+import n2j.inference.summary_stats as ss
 
 
 def get_idx(orig_list, sub_list):
@@ -193,8 +193,9 @@ class InferenceManager:
             self.test_dataset = dataset
             # Compute or retrieve stats necessary for resampling
             # before setting any kind of transforms
+            # Note: stats_test.pt is in our_dir, not checkpoint_dir
             if data_kwargs['subsample_pdf_func'] is not None:
-                stats_test_path = osp.join(self.checkpoint_dir, 'stats_test.pt')
+                stats_test_path = osp.join(self.out_dir, 'stats_test.pt')
                 if osp.exists(stats_test_path):
                     stats_test = torch.load(stats_test_path)
                 else:
@@ -295,7 +296,27 @@ class InferenceManager:
         np.save(path, samples)
         return samples
 
-    def get_true_kappa(self, is_train, add_suffix='', save=True):
+    def get_true_kappa(self, is_train, add_suffix='',
+                       compute_summary=True, save=True):
+        """Fetch true kappa (for train/val/test)
+
+        Parameters
+        ----------
+        is_train : bool
+            Whether to get true kappas for train (test otherwise)
+        add_suffix : str, optional
+            Suffix to append to the filename. Useful in case there are
+            variations in the test distribution
+        compute_summary : bool, optional
+            Whether to compute summary stats in the loop
+        save : bool, optional
+            Whether to store the kappa to disk
+
+        Returns
+        -------
+        np.ndarray
+            true kappas of shape `[n_data, Y_dim]`
+        """
         # Decide which dataset we're collecting kappa labels for
         if is_train:
             loader = self.train_loader
@@ -313,16 +334,27 @@ class InferenceManager:
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
+        if compute_summary:
+            pos_indices = get_idx(self.sub_features,
+                                  ['ra_true', 'dec_true'])
+            ss_obj = ss.SummaryStatistics(n_data, pos_indices)
         # Init empty array
         true_kappa = np.empty([n_data, self.Y_dim])
         with torch.no_grad():
             # Populate `true_kappa` by batches
             for i, batch in enumerate(loader):
+                # Update summary stats using CPU batch
+                if compute_summary:
+                    ss_obj.update(batch)
                 batch = batch.to(self.device)
-                B = batch.y.shape[0]  # [this batch size]
+                B = batch.y.shape[0]  # [this batch size]ss_obj
                 true_kappa[i*B: (i+1)*B, :] = (batch.y*Y_std + Y_mean).cpu().numpy()
         if save:
             np.save(path, true_kappa)
+            if compute_summary:
+                summary_path = osp.join(self.out_dir,
+                                        f'summary_stats_{suffix}.npy')
+                np.save(summary_path, ss_obj.stats, allow_pickle=True)
         return true_kappa
 
     def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout,

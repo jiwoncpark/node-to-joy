@@ -197,6 +197,7 @@ def log_prob_mcmc(omega, log_p_k_given_omega_func, log_p_k_given_omega_int):
     log_p_k_given_omega = log_p_k_given_omega_func(omega[0], omega[1])
     log_ratio = log_p_k_given_omega - log_p_k_given_omega_int  # [n_test, n_samples]
     mean_over_samples = special.logsumexp(log_ratio,
+                                          # normalization
                                           b=1.0/log_ratio.shape[-1],
                                           axis=1)  # [n_test,]
     assert not np.isnan(log_p_k_given_omega_int).any()
