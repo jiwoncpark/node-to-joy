@@ -2,6 +2,7 @@
 
 """
 
+import shutil
 import unittest
 import numpy as np
 from addict import Dict
@@ -14,6 +15,9 @@ class TestSummaryStats(unittest.TestCase):
     utility functions
 
     """
+    @classmethod
+    def setUpClass(cls):
+        cls.stats_path = 'stats_path_testing.npy'
 
     def test_get_number_counts(self):
         """Test `get_number_counts`
@@ -74,6 +78,25 @@ class TestSummaryStats(unittest.TestCase):
                                       expected_N)
         np.testing.assert_array_equal(ss_obj.stats['N_inv_dist'],
                                       expected_N_inv_dist)
+
+    def test_set_stats(self):
+        """Test `set_stats` method
+        """
+        any_stats = dict(
+                         N=np.arange(5),
+                         N_inv_dist=np.arange(5)
+                         )
+        np.save(self.stats_path, any_stats, allow_pickle=True)
+        ss_obj = ss.SummaryStats(n_data=5)
+        ss_obj.set_stats(self.stats_path)
+        np.testing.assert_array_equal(ss_obj.stats['N'],
+                                      np.arange(5))
+        np.testing.assert_array_equal(ss_obj.stats['N_inv_dist'],
+                                      np.arange(5))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree()
 
 
 if __name__ == '__main__':

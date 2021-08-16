@@ -22,7 +22,8 @@ from n2j.trainval_data.utils.transform_utils import (Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
                                                      get_bands_in_x)
-import n2j.inference.summary_stats as ss
+import n2j.inference.summary_stats_baseline as ssb
+import n2j.inference.calibration as calib
 
 
 def get_idx(orig_list, sub_list):
@@ -327,9 +328,12 @@ class InferenceManager:
             suffix = 'test'
             n_data = len(self.test_dataset)
         path = osp.join(self.out_dir, f'k_{suffix}{add_suffix}.npy')
+        ss_path = osp.join(self.out_dir,
+                           f'summary_stats_{suffix}.npy')
         if osp.exists(path):
-            true_kappa = np.load(path)
-            return true_kappa
+            if compute_summary and osp.exists(ss_path):
+                true_kappa = np.load(path)
+                return true_kappa
         print(f"Saving 'k_{suffix}{add_suffix}.npy'...")
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
@@ -337,7 +341,7 @@ class InferenceManager:
         if compute_summary:
             pos_indices = get_idx(self.sub_features,
                                   ['ra_true', 'dec_true'])
-            ss_obj = ss.SummaryStatistics(n_data, pos_indices)
+            ss_obj = ssb.SummaryStats(n_data, pos_indices)
         # Init empty array
         true_kappa = np.empty([n_data, self.Y_dim])
         with torch.no_grad():
@@ -345,17 +349,43 @@ class InferenceManager:
             for i, batch in enumerate(loader):
                 # Update summary stats using CPU batch
                 if compute_summary:
-                    ss_obj.update(batch)
+                    ss_obj.update(batch, i)
                 batch = batch.to(self.device)
                 B = batch.y.shape[0]  # [this batch size]ss_obj
                 true_kappa[i*B: (i+1)*B, :] = (batch.y*Y_std + Y_mean).cpu().numpy()
         if save:
             np.save(path, true_kappa)
             if compute_summary:
-                summary_path = osp.join(self.out_dir,
-                                        f'summary_stats_{suffix}.npy')
-                np.save(summary_path, ss_obj.stats, allow_pickle=True)
+                ss_obj.export_stats(ss_path)
         return true_kappa
+
+    def get_summary_stats(self, thresholds):
+        """Save accepted samples from summary statistics matching
+
+        Parameters
+        ----------
+        thresholds : dict
+            Matching thresholds for summary stats
+            Keys should be one or both of 'N' and 'N_inv_dist'.
+
+        """
+        train_k = self.get_true_kappa(is_train=True,
+                                      compute_summary=True)
+        test_k = self.get_true_kappa(is_train=False,
+                                     compute_summary=True)
+        pos_indices = get_idx(self.sub_features,
+                              ['ra_true', 'dec_true'])
+        train_ss_obj = ssb.SummaryStats(len(self.train_dataset),
+                                        pos_indices)
+        train_ss_obj.set_stats(osp.join(self.out_dir,
+                               'summary_stats_train.npy'))
+        test_ss_obj = ssb.SummaryStats(len(self.test_dataset),
+                                       pos_indices)
+        test_ss_obj.set_stats(osp.join(self.out_dir,
+                              'summary_stats_test.npy'))
+        matcher = ssb.Matcher(train_ss_obj, test_ss_obj,
+                              train_k, self.out_dir)
+        matcher.match_summary_stats(thresholds)
 
     def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout,
                                     interim_pdf_func):
@@ -469,11 +499,29 @@ class InferenceManager:
                 weights=np.exp(log_weights),
                 color='#d6616b',
                 label='reweighted')
-
         # Truth
         ax.axvline(true_k[idx].squeeze(), color='k', label='truth')
         ax.set_xlabel(r'$\kappa$')
         ax.legend()
+
+    def get_calibration_plot(self):
+        k_bnn = self.get_bnn_kappa()
+        k_bnn = np.transpose(k_bnn, [2, 0, 1])  # [n_samples, n_sightlines, 1]
+        y_mean = np.mean(k_bnn, axis=0)
+        k_val = self.get_true_kappa(is_train=False)
+        train_cov = self.Y_std.cpu().numpy()
+
+        fig = calib.plot_calibration(post_samples=k_bnn,
+                                     y_mean=y_mean,
+                                     y_truth=k_val,
+                                     cov=train_cov,
+                                     show_plot=False,
+                                     ls='--',
+                                     color_map=['tab:gray', '#880519'],
+                                     legend=['Perfect calibration',
+                                             'Dropout'])
+        fig.savefig(osp.join(self.out_dir, 'calibration.pdf'),
+                    bbox_inches='tight', pad_inches=0, dpi=200)
 
     # TODO: add docstring
     # TODO: implement initialization from PSO
