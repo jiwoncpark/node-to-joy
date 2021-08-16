@@ -2,12 +2,13 @@
 
 """
 
+import os
 import shutil
 import unittest
 import numpy as np
 from addict import Dict
 import torch
-import n2j.inference.summary_stats as ss
+import n2j.inference.summary_stats_baseline as ssb
 
 
 class TestSummaryStats(unittest.TestCase):
@@ -24,7 +25,7 @@ class TestSummaryStats(unittest.TestCase):
         """
         x = torch.randn([10, 3])
         batch_indices = torch.tensor([0, 0, 0, 0, 0, 1, 1, 2, 2, 2])
-        actual = ss.get_number_counts(x, batch_indices)
+        actual = ssb.get_number_counts(x, batch_indices)
         expected = [5, 2, 3]
         np.testing.assert_array_equal(actual, expected)
 
@@ -41,7 +42,7 @@ class TestSummaryStats(unittest.TestCase):
                                      [8, 15],
                                      [7, 24]])
 
-        actual = ss.get_inv_dist_number_counts(torch.from_numpy(x),
+        actual = ssb.get_inv_dist_number_counts(torch.from_numpy(x),
                                                torch.from_numpy(batch_indices),
                                                ra_dec_idx)
         dist = np.array([5, 1.e-5, 29, 13, 17, 25])
@@ -53,7 +54,7 @@ class TestSummaryStats(unittest.TestCase):
     def test_update(self):
         """Test `update` method
         """
-        ss_obj = ss.SummaryStats(n_data=3)
+        ss_obj = ssb.SummaryStats(n_data=3)
         x_np = np.array([[3, 4],
                         [1.e-7, 1.e-7],
                         [20, 21],
@@ -79,7 +80,7 @@ class TestSummaryStats(unittest.TestCase):
         np.testing.assert_array_equal(ss_obj.stats['N_inv_dist'],
                                       expected_N_inv_dist)
 
-    def test_set_stats(self):
+    def test_set_stats_export_stats(self):
         """Test `set_stats` method
         """
         any_stats = dict(
@@ -87,7 +88,13 @@ class TestSummaryStats(unittest.TestCase):
                          N_inv_dist=np.arange(5)
                          )
         np.save(self.stats_path, any_stats, allow_pickle=True)
-        ss_obj = ss.SummaryStats(n_data=5)
+        ss_obj = ssb.SummaryStats(n_data=5)
+        ss_obj.set_stats(self.stats_path)
+        np.testing.assert_array_equal(ss_obj.stats['N'],
+                                      np.arange(5))
+        np.testing.assert_array_equal(ss_obj.stats['N_inv_dist'],
+                                      np.arange(5))
+        ss_obj.export_stats(self.stats_path)
         ss_obj.set_stats(self.stats_path)
         np.testing.assert_array_equal(ss_obj.stats['N'],
                                       np.arange(5))
@@ -96,7 +103,7 @@ class TestSummaryStats(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree()
+        os.remove(cls.stats_path)
 
 
 if __name__ == '__main__':
