@@ -27,7 +27,7 @@ class CosmoDC2Graph(ConcatDataset):
     """
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
                  n_data, features, subsample_pdf_func=None,
-                 n_subsample=None,
+                 n_subsample=None, subsample_with_replacement=True,
                  stop_mean_std_early=False, n_cores=20):
         """Summary
 
@@ -62,6 +62,7 @@ class CosmoDC2Graph(ConcatDataset):
         if self.subsample_pdf_func is not None:
             assert n_subsample is not None
         self.n_subsample = n_subsample
+        self.replace = False
         datasets = []
         Y_list = []
         for i in range(self.n_datasets):
@@ -198,7 +199,7 @@ class CosmoDC2Graph(ConcatDataset):
         p = subsample_weight/kde.pdf(y_values_orig)
         p /= np.sum(p)
         subsample_idx = rng.choice(np.arange(len(y_values_orig)),
-                                   p=p, replace=True,
+                                   p=p, replace=self.replace,
                                    size=self.n_subsample)
         subsample_idx = subsample_idx.tolist()
         stats_val = dict(subsample_idx=subsample_idx)
