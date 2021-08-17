@@ -1,8 +1,12 @@
 """Summary stats baseline computations
 
 """
+import os
 import os.path as osp
+import copy
 import numpy as np
+from scipy import stats
+import pandas as pd
 from tqdm import tqdm
 import torch
 from torch_scatter import scatter_add
@@ -109,7 +113,7 @@ class SummaryStats:
 
 class Matcher:
     def __init__(self, train_stats, test_stats,
-                 train_y, out_dir):
+                 train_y, out_dir, test_y=None):
         """Matcher of summary statistics between two datasets, train
         and test
 
@@ -124,7 +128,10 @@ class Matcher:
         self.train_stats = train_stats
         self.test_stats = test_stats
         self.train_y = train_y
+        self.test_y = test_y
         self.out_dir = out_dir
+        os.makedirs(self.out_dir, exist_ok=True)
+        self.overview_path = osp.join(self.out_dir, 'overview.csv')
 
     def match_summary_stats(self, thresholds):
         """Match summary stats between train and test
@@ -137,7 +144,17 @@ class Matcher:
 
         """
         ss_names = list(thresholds.keys())
-        n_test = len(self.test_stats[ss_names[0]])
+        n_test = len(self.test_stats.stats[ss_names[0]])
+        overview = pd.DataFrame(columns=['los_i',
+                                         'summary_stats_name',
+                                         'threshold',
+                                         'n_matches',
+                                         'med',
+                                         'plus_1sig',
+                                         'minus_1sig',
+                                         'logp'
+                                         'mad',
+                                         'ae'])
         for i in tqdm(range(n_test), desc="matching"):
             for s in ss_names:
                 test_x = self.test_stats.stats[s][i]
@@ -148,8 +165,40 @@ class Matcher:
                                         self.train_y,
                                         t)
                     np.save(osp.join(self.out_dir,
-                                     f'matched_k_los_{i}_ss_{s}_{t:.5f}.npy'),
+                                     f'matched_k_los_{i}_ss_{s}_{t:.1f}.npy'),
                             accepted)
+                    # Add descriptive stats to overview table
+                    row = dict(los_i=i,
+                               summary_stats_name=s,
+                               threshold=t,
+                               test_x=test_x,
+                               n_matches=len(accepted))
+                    if len(accepted) > 0:
+                        lower, med, upper = np.quantile(accepted,
+                                                        [0.5-0.34, 0.5, 0.5+0.34])
+                        row.update(med=med,
+                                   plus_1sig=upper-med,
+                                   minus_1sig=med-lower,
+                                   mad=stats.median_abs_deviation(accepted)
+                                   )
+                        # Comparison with truth, if available
+                        if self.test_y is not None:
+                            kde = stats.gaussian_kde(accepted,
+                                                     bw_method='scott')
+                            true_k = self.test_y[i, 0]
+                            row.update(logp=kde.logpdf(true_k),
+                                       ae=np.abs(med - true_k),
+                                       true_k=true_k
+                                       )
+                    overview = overview.append(row, ignore_index=True)
+        overview.to_csv(self.overview_path, index=False)
+
+    def get_overview_table(self):
+        if not osp.exists(self.overview_path):
+            raise OSError("Table doesn't exist. Please generate it first.")
+        else:
+            overview = pd.read_csv(self.overview_path, index_col=None)
+        return overview
 
 
 def match(train_x, test_x, train_y, threshold):
@@ -173,5 +222,5 @@ def match(train_x, test_x, train_y, threshold):
         samples
     """
     is_passing = np.abs(train_x - test_x) < threshold
-    accepted = train_y[is_passing]
-    return accepted, is_passing
+    accepted = train_y[is_passing]  # [n_test, Y_dim]
+    return accepted.squeeze(-1), is_passing

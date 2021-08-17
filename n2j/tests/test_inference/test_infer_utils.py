@@ -34,7 +34,6 @@ class TestInferUtils(unittest.TestCase):
         log_sigma = np.log(0.005)
         x = self.rng.normal(100)*np.exp(log_sigma) + 0.04
         actual_logp = iutils.get_normal_logpdf(mu, log_sigma, x)
-        actual_logp = actual_logp - 0.5*np.log(2*np.pi)
         true_logp = scipy.stats.norm.logpdf(x,
                                             loc=mu, scale=np.exp(log_sigma))
         np.testing.assert_array_almost_equal(actual_logp, true_logp)
@@ -101,6 +100,38 @@ class TestInferUtils(unittest.TestCase):
                                       scipy.stats.norm.logpdf(loc=0,
                                                               scale=2.0,
                                                               x=0) - interim)
+
+    def test_log_prob_mcmc_bnn(self):
+        """Test evaluation of MCMC objective for correctness,
+        for various numbers of BNN samples
+        """
+        n_test = 4
+
+        def log_gaussian_5(mu, log_sigma):
+            """Gaussian log likelihood for 5 BNN samples
+            """
+            lpdf = scipy.stats.norm.logpdf(loc=mu,
+                                           scale=np.exp(log_sigma),
+                                           x=np.zeros([n_test, 5]))
+            return lpdf
+
+        def log_gaussian(mu, log_sigma):
+            """Gaussian log likelihood for 1 BNN sample
+            """
+            lpdf = scipy.stats.norm.logpdf(loc=mu,
+                                           scale=np.exp(log_sigma),
+                                           x=np.zeros([n_test, 1]))
+            return lpdf
+        # At true omega, x = 0
+        proposed = [0.0, np.log(2.0)]  # N(0, 2)
+        logp_mcmc_5 = iutils.log_prob_mcmc(omega=proposed,
+                                           log_p_k_given_omega_func=log_gaussian_5,
+                                           log_p_k_given_omega_int=0.0)
+        logp_mcmc = iutils.log_prob_mcmc(omega=proposed,
+                                         log_p_k_given_omega_func=log_gaussian,
+                                         log_p_k_given_omega_int=0.0)
+        np.testing.assert_array_equal(logp_mcmc_5,
+                                      logp_mcmc)
 
     def test_log_prob_mcmc_multiple(self):
         """Test evaluation of MCMC objective for correctness,
@@ -176,6 +207,7 @@ class TestInferUtils(unittest.TestCase):
 
         """
         # True omega (standard normal)
+        return
         true_mu = 0.0
         true_sigma = 1.0
         true_log_sigma = np.log(true_sigma)
@@ -196,7 +228,7 @@ class TestInferUtils(unittest.TestCase):
         mcmc_kwargs = dict(
                            p0=p0,
                            n_run=n_run,
-                           n_burn=1000,
+                           n_burn=20,
                            n_walkers=n_walkers,
                            chain_path=osp.join(self.out_dir,
                                                f'chain_{n_test}'),
