@@ -2,6 +2,7 @@
 
 """
 import os
+import sys
 import numpy as np
 from scipy import stats
 from n2j.inference.inference_manager import InferenceManager
@@ -63,6 +64,8 @@ if __name__ == '__main__':
     infer_obj.configure_model('N2JNet', model_kwargs)
     # Load trained model
     infer_obj.load_state(cfg['checkpoint_path'])
+    # Get summary stats baseline
+    infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'])
 
     # Hierarchical reweighting
     p0 = np.array([[0.04, np.log(0.005)]])
@@ -73,7 +76,7 @@ if __name__ == '__main__':
                        **cfg['extra_mcmc_kwargs']
                        )
     if cfg['run_mcmc']:
-        infer_obj.run_mcmc_for_omega_post(n_samples=50,
+        infer_obj.run_mcmc_for_omega_post(n_samples=1000,
                                           n_mc_dropout=20,
                                           mcmc_kwargs=mcmc_kwargs,
                                           interim_pdf_func=norm_obj.pdf,
