@@ -384,8 +384,12 @@ class InferenceManager:
         test_ss_obj.set_stats(osp.join(self.out_dir,
                               'summary_stats_test.npy'))
         matcher = ssb.Matcher(train_ss_obj, test_ss_obj,
-                              train_k, self.out_dir)
+                              train_k,
+                              osp.join(self.out_dir, 'matching'),
+                              test_k)
         matcher.match_summary_stats(thresholds)
+        overview = matcher.get_overview_table()
+        return overview
 
     def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout,
                                     interim_pdf_func):
@@ -409,11 +413,11 @@ class InferenceManager:
         path = osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
         if osp.exists(path):
             return np.load(path)
-        k_train = self.get_true_kappa(is_train=True)
+        k_train = self.get_true_kappa(is_train=True).squeeze(1)
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
-                                   n_mc_dropout=n_mc_dropout)
-        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=k_train.squeeze(),
-                                                                              k_bnn=k_bnn.squeeze(),
+                                   n_mc_dropout=n_mc_dropout).squeeze(1)
+        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=k_train,
+                                                                              k_bnn=k_bnn,
                                                                               interim_pdf_func=interim_pdf_func)
         np.save(path, log_p_k_given_omega_int)
         return log_p_k_given_omega_int

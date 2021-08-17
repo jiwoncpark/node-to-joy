@@ -29,6 +29,7 @@ def get_normal_logpdf(mu, log_sigma, x,
     elif np.any(candidate > bounds_upper):
         return -np.inf
     logpdf = -log_sigma - 0.5*(x - mu)**2.0/np.exp(2.0*log_sigma)
+    logpdf = logpdf - 0.5*np.log(2*np.pi)  # normalization
     assert not np.isnan(logpdf).any()
     assert not np.isinf(logpdf).any()
     return logpdf
@@ -133,7 +134,7 @@ def get_log_p_k_given_omega_int_analytic(k_train, k_bnn, interim_pdf_func):
     Parameters
     ----------
     k_train : np.array of shape `[n_train]`
-        kappa in the training set
+        kappa in the training set. Unused.
     k_bnn : np.array of shape `[n_test, n_samples]`
     interim_pdf_func : callable
         function that evaluates the PDF of the interim prior
@@ -164,6 +165,7 @@ def get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
 
     """
     np.random.seed(42)
+    k_bnn = k_bnn.squeeze(1)  # pop the lone Y_dim dimension
     log_p_k_given_omega_func = partial(get_normal_logpdf, x=k_bnn,
                                        bounds_lower=bounds_lower,
                                        bounds_upper=bounds_upper)
@@ -171,6 +173,20 @@ def get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                                           log_p_k_given_omega_func=log_p_k_given_omega_func,
                                           log_p_k_given_omega_int=log_p_k_given_omega_int
                                           )
+    if True:
+        print("int", log_p_k_given_omega_int.shape)
+        print("kbnn", k_bnn.shape)
+        np.save('num.npy', log_p_k_given_omega_func(0.01, np.log(0.04)))
+        np.save('denom.npy', log_p_k_given_omega_int)
+        p = np.zeros([200, 100])
+        xx, yy = np.meshgrid(np.linspace(0, 0.05, 200),
+                             np.linspace(-7, -3, 100), indexing='ij')
+        for i in range(200):
+            for j in range(100):
+                p[i, j] = log_prob_mcmc([xx[i, j], yy[i, j]],
+                                        **mcmc_kwargs['log_prob_kwargs'])
+        np.save('p_look.npy', p)
+
     run_mcmc(log_prob_mcmc, **mcmc_kwargs)
 
 

@@ -26,7 +26,7 @@ def get_p_Y_val_approx_mahalanobis(post_samples, y_mean, y_truth, cov):
     bnn_coverage = (post_samples-y_mean)/cov
     truth_coverage = np.expand_dims((y_truth-y_mean)/cov, axis=0)
 
-    p_Y_val = (bnn_coverage < truth_coverage)
+    p_Y_val = (bnn_coverage < truth_coverage)  # [n_samples, n_sightlines, 1]
     p_Y_val = np.mean(p_Y_val, axis=0)
     return p_Y_val
 
