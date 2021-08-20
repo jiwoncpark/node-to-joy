@@ -457,9 +457,8 @@ class InferenceManager:
         log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
                                                                    n_mc_dropout,
                                                                    interim_pdf_func)
-        omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
+        # omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
         log_weights = iutils.get_kappa_log_weights(k_bnn[idx, :],
-                                                   omega_post_samples,
                                                    log_p_k_given_omega_int[idx, :])
         np.save(path, log_weights)
         return log_weights
