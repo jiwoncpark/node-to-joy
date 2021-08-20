@@ -244,22 +244,37 @@ def get_mcmc_samples(chain_path, chain_kwargs):
     return chain
 
 
-def get_kappa_log_weights(k_bnn, omega_post_samples, log_p_k_given_omega_int):
+def get_kappa_log_weights(k_bnn, log_p_k_given_omega_int,
+                          omega_post_samples=None):
     """Evaluate the log weights used to reweight individual kappa posteriors
 
     Parameters
     ----------
-    k_bnn : np.array of shape `[n_samples]`
-    omega_post_samples : np.array of shape `[n_omega, 2]`
-    log_p_k_given_omega_int : np.array of shape `[n_samples]`
+    k_bnn : np.ndarray of shape `[n_samples]`
+        BNN posterior samples
+    log_p_k_given_omega_int : np.ndarray of shape `[n_samples]`
+        Likelihood of BNN kappa given the interim prior.
+    omega_post_samples : np.ndarray, optional
+        Omega posterior samples used as the prior to apply.
+        Should be np.array of shape `[n_omega, 2]`.
+        If None, only division by the interim prior will be done.
+
+    Returns
+    -------
+    np.ndarray
+        Description
+
 
     """
-    k_bnn = k_bnn.reshape(-1, 1)  # [n_samples, 1]
-    mu = omega_post_samples[:, 0].reshape([1, -1])  # [1, n_omega]
-    log_sigma = omega_post_samples[:, 1].reshape([1, -1])  # [1, n_omega]
-    num = get_normal_logpdf(x=k_bnn,
-                            mu=mu,
-                            log_sigma=log_sigma)  # [n_samples, n_omega]
+    k_bnn = k_bnn.reshape(-1, 1)  # [n_samplses, 1]
+    if omega_post_samples is not None:
+        mu = omega_post_samples[:, 0].reshape([1, -1])  # [1, n_omega]
+        log_sigma = omega_post_samples[:, 1].reshape([1, -1])  # [1, n_omega]
+        num = get_normal_logpdf(x=k_bnn,
+                                mu=mu,
+                                log_sigma=log_sigma)  # [n_samples, n_omega]
+    else:
+        num = 0.0
     denom = log_p_k_given_omega_int[:, np.newaxis]  # [n_samples, 1]
     log_weights = special.logsumexp(num - denom, axis=-1)  # [n_samples]
     return log_weights
