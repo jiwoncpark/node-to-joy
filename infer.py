@@ -68,7 +68,7 @@ if __name__ == '__main__':
     infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'])
 
     # Hierarchical reweighting
-    p0 = np.array([[0.04, np.log(0.005)]])
+    p0 = np.array([[0.01, np.log(0.04)]])
     p0 = p0 + np.random.randn(cfg['extra_mcmc_kwargs']['n_walkers'],
                               2)*np.array([[0.01, 0.5]])
     mcmc_kwargs = dict(p0=p0,
@@ -80,6 +80,6 @@ if __name__ == '__main__':
                                           n_mc_dropout=20,
                                           mcmc_kwargs=mcmc_kwargs,
                                           interim_pdf_func=norm_obj.pdf,
-                                          bounds_lower=np.array([-0.5, -10]),
+                                          bounds_lower=np.array([-0.5, -6]),
                                           bounds_upper=np.array([1.5, 0])
                                           )
