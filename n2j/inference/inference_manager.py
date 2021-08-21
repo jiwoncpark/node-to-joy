@@ -256,7 +256,7 @@ class InferenceManager:
         print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
         self.last_saved_val_loss = val_loss
 
-    def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20):
+    def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20, flatten=True):
         """Get the samples from the BNN
 
         Parameters
@@ -271,14 +271,16 @@ class InferenceManager:
         np.array of shape `[n_test, self.Y_dim, n_samples*n_mc_dropout]`
 
         """
+        n_test = len(self.test_dataset)
         path = osp.join(self.out_dir, 'k_bnn.npy')
         if osp.exists(path):
             samples = np.load(path)
+            if flatten:
+                samples = samples.reshape([n_test, self.Y_dim, -1])
             return samples
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
-        n_test = len(self.test_dataset)
         self.model.eval()
         with torch.no_grad():
             samples = np.empty([n_test, n_mc_dropout, n_samples, self.Y_dim])
@@ -293,8 +295,11 @@ class InferenceManager:
                                                               Y_std,
                                                               n_samples)
                     samples[i*B: (i+1)*B, mc_iter, :, :] = mc_samples
-        samples = samples.transpose(0, 3, 1, 2).reshape([n_test, self.Y_dim, -1])
+        # Transpose dims to get [n_test, Y_dim, n_mc_dropout, n_samples]
+        samples = samples.transpose(0, 3, 1, 2)
         np.save(path, samples)
+        if flatten:
+            samples = samples.reshape([n_test, self.Y_dim, -1])
         return samples
 
     def get_true_kappa(self, is_train, add_suffix='',
@@ -449,8 +454,29 @@ class InferenceManager:
                               bounds_lower, bounds_upper)
 
     def get_kappa_log_weights(self, idx, n_samples, n_mc_dropout,
-                              chain_path, chain_kwargs,
                               interim_pdf_func):
+        """Get log weights for reweighted kappa posterior
+
+        Parameters
+        ----------
+        idx : int
+            Index of sightline in test set
+        n_samples : int
+            Number of samples per dropout, for getting kappa samples.
+            (May be overridden with what was used previously, if
+            kappa samples were already drawn and stored)
+        n_mc_dropout : int
+            Number of dropout iterates, for getting kappa samples.
+            (May be overridden with what was used previously, if
+            kappa samples were already drawn and stored)
+        interim_pdf_func : callable
+            Description
+
+        Returns
+        -------
+        np.ndarray
+            log weights for each of the BNN samples for this sightline
+        """
         path = osp.join(self.out_dir, f'log_weights_{idx}.npy')
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout)
@@ -462,6 +488,34 @@ class InferenceManager:
                                                    log_p_k_given_omega_int[idx, :])
         np.save(path, log_weights)
         return log_weights
+
+    def get_kappa_log_weights_grid(self, idx, grid,
+                                   n_samples, n_mc_dropout, interim_pdf_func):
+        """Get log weights for reweighted kappa posterior
+
+        Parameters
+        ----------
+        idx : int
+            Index of sightline in test set
+        grid : np.ndarray
+            Grid of kappa values at which to evaluate log weights
+        n_samples : int
+            Number of samples per dropout, for getting kappa samples.
+            (May be overridden with what was used previously, if
+            kappa samples were already drawn and stored)
+        n_mc_dropout : int
+            Number of dropout iterates, for getting kappa samples.
+            (May be overridden with what was used previously, if
+            kappa samples were already drawn and stored)
+        interim_pdf_func : callable
+            Description
+
+        Returns
+        -------
+        np.ndarray
+            log weights for each of the BNN samples for this sightline
+        """
+        raise NotImplementedError
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
                              corner_kwargs, log_idx=None):
