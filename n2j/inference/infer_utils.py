@@ -262,8 +262,7 @@ def get_kappa_log_weights(k_bnn, log_p_k_given_omega_int,
     Returns
     -------
     np.ndarray
-        Description
-
+        log weights evaluated at k_bnn
 
     """
     k_bnn = k_bnn.reshape(-1, 1)  # [n_samplses, 1]
@@ -299,3 +298,16 @@ def get_kappa_log_weights_vectorized(k_bnn, omega_post_samples, log_p_k_given_om
     denom = log_p_k_given_omega_int[:, :, np.newaxis]
     weights = special.logsumexp(num - denom, axis=-1)  # [n_test, n_samples]
     return weights
+
+
+def resample_from_pdf(grid, pdf, n_samples):
+    if n_samples > grid:
+        fine_grid = np.linspace(grid.min(), grid.max(), n_samples*5)
+        pdf = np.interp(fine_grid, grid, pdf)
+    else:
+        fine_grid = grid
+    resampled = np.random.choice(fine_grid,
+                                 size=n_samples,
+                                 replace=True,
+                                 p=pdf)
+    return resampled
