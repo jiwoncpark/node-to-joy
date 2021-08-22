@@ -83,3 +83,10 @@ if __name__ == '__main__':
                                           bounds_lower=np.array([-0.5, -6]),
                                           bounds_upper=np.array([1.5, 0])
                                           )
+    grid_k_kwargs = dict(grid=np.linspace(-0.2, 0.2, 1000),
+                         n_samples=1000,
+                         n_mc_dropout=20,
+                         interim_pdf_func=norm_obj.pdf,
+                         )
+    k_bnn = infer_obj.get_reweighted_bnn_kappa(1000, grid_k_kwargs)
+    infer_obj.get_calibration_plot(k_bnn)

@@ -7,6 +7,7 @@ import random
 import datetime
 import json
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 import scipy.stats
 import torch
@@ -470,7 +471,7 @@ class InferenceManager:
             (May be overridden with what was used previously, if
             kappa samples were already drawn and stored)
         interim_pdf_func : callable
-            Description
+            Function that returns the density of the interim prior
 
         Returns
         -------
@@ -489,33 +490,85 @@ class InferenceManager:
         np.save(path, log_weights)
         return log_weights
 
-    def get_kappa_log_weights_grid(self, idx, grid,
-                                   n_samples, n_mc_dropout, interim_pdf_func):
-        """Get log weights for reweighted kappa posterior
+    def get_kappa_log_weights_grid(self, idx,
+                                   grid=None,
+                                   n_samples=None,
+                                   n_mc_dropout=None,
+                                   interim_pdf_func=None):
+        """Get log weights for reweighted kappa posterior, analytically
+        on a grid
 
         Parameters
         ----------
         idx : int
             Index of sightline in test set
-        grid : np.ndarray
+        grid : np.ndarray, optional
             Grid of kappa values at which to evaluate log weights
-        n_samples : int
+            (May be overridden with what was used previously, if
+            kappa samples were already drawn and stored)
+        n_samples : int, optional
             Number of samples per dropout, for getting kappa samples.
             (May be overridden with what was used previously, if
             kappa samples were already drawn and stored)
-        n_mc_dropout : int
+        n_mc_dropout : int, optional
             Number of dropout iterates, for getting kappa samples.
             (May be overridden with what was used previously, if
             kappa samples were already drawn and stored)
-        interim_pdf_func : callable
-            Description
+        interim_pdf_func : callable, optional
+            Function that returns the density of the interim prior
+
+        Note
+        ----
+        log doesn't help with numerical stability since we divide
+        probabilities directly, but we're keeping this just for
+        consistency
 
         Returns
         -------
         np.ndarray
-            log weights for each of the BNN samples for this sightline
+            kappa grid, log weights for each of the BNN samples for
+            this sightline
         """
-        raise NotImplementedError
+        path = osp.join(self.out_dir, f'grid_log_weights_{idx}.npy')
+        if osp.exists(path):
+            return np.load(path)
+        # Get unflattened, i.e. [n_test, 1, n_mc_dropout, n_samples]
+        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
+                                   n_mc_dropout=n_mc_dropout,
+                                   flatten=False)
+        k_bnn = k_bnn[idx, 0, :, :]  # [n_mc_dropout, n_samples]
+        n_mc_dropout, n_samples = k_bnn.shape
+        numer = np.zeros(grid.shape)  # init numerator
+        # Fit a normal for each MC dropout
+        for d in range(n_mc_dropout):
+            samples_d = k_bnn[d, :]
+            norm_d = scipy.stats.norm(loc=samples_d.mean(),
+                                      scale=samples_d.std())
+            bnn_prob_d = norm_d.pdf(grid)
+            numer += (bnn_prob_d - numer)/(d+1)  # running mean
+        np.save(osp.join(self.out_dir, f'grid_bnn_gmm_{idx}.npy'),
+                numer)
+        denom = interim_pdf_func(grid)
+        log_weights = np.log(numer/denom)
+        log_weights_grid = np.stack([grid, log_weights], axis=0)
+        np.save(path, log_weights_grid)
+        return log_weights_grid
+
+    def get_reweighted_bnn_kappa(self, n_resamples, grid_kappa_kwargs,
+                                 ):
+        path = osp.join(self.out_dir, 'k_bnn_reweighted.npy')
+        if osp.exists(path):
+            print("Reading existing `k_bnn_reweighted.npy`...")
+            return np.load(path)
+        n_test = len(self.test_dataset)
+        k_reweighted = np.empty([n_test, 1, n_resamples])
+        for idx in tqdm(range(n_test), desc='evaluating, resampling on grid'):
+            grid, log_p = self.get_kappa_log_weights_grid(idx,
+                                                          **grid_kappa_kwargs)
+            resamples = iutils.resample_from_pdf(grid, log_p, n_resamples)
+            k_reweighted[idx, 0, :] = resamples
+        np.save(path, k_reweighted)
+        return k_reweighted
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
                              corner_kwargs, log_idx=None):
@@ -529,13 +582,17 @@ class InferenceManager:
         fig.savefig(osp.join(self.out_dir, 'omega_post.pdf'))
 
     def visualize_kappa_post(self, idx, n_samples, n_mc_dropout,
-                             chain_path, chain_kwargs, interim_pdf_func):
+                             interim_pdf_func, grid=None):
         log_weights = self.get_kappa_log_weights(idx,
                                                  n_samples,
                                                  n_mc_dropout,
-                                                 chain_path,
-                                                 chain_kwargs,
                                                  interim_pdf_func)  # [n_samples]
+        grid, log_w_grid = self.get_kappa_log_weights_grid(idx,
+                                                           grid,
+                                                           n_samples,
+                                                           n_mc_dropout,
+                                                           interim_pdf_func)
+        w_grid = np.exp(log_w_grid)
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout)  # [n_test, n_samples]
         true_k = self.get_true_kappa(is_train=False)
@@ -548,22 +605,36 @@ class InferenceManager:
                 density=True,
                 color='#8ca252',
                 label='original')
-        # Reweighted posterior
+        # Reweighted posterior, per sample
         ax.hist(k_bnn[idx].squeeze(),
                 histtype='step',
                 bins=25,
                 density=True,
                 weights=np.exp(log_weights),
                 color='#d6616b',
-                label='reweighted')
+                label='reweighted per sample')
+        # Reweighted posterior, analytical
+        reweighted_k_bnn = self.get_reweighted_bnn_kappa(None, None)[idx, 0, :]
+        bin_vals, bin_edges = np.histogram(reweighted_k_bnn, bins='scott',
+                                           density=True)
+        norm_factor = np.max(bin_vals)/np.max(w_grid)
+        ax.plot(grid, norm_factor*w_grid,
+                color='#d6616b',
+                label='reweighted on grid')
         # Truth
         ax.axvline(true_k[idx].squeeze(), color='k', label='truth')
         ax.set_xlabel(r'$\kappa$')
         ax.legend()
 
-    def get_calibration_plot(self):
-        k_bnn = self.get_bnn_kappa()
-        k_bnn = np.transpose(k_bnn, [2, 0, 1])  # [n_samples, n_sightlines, 1]
+    def get_calibration_plot(self, k_bnn):
+        """Plot calibration (should be run on the validation set)
+
+        Parameters
+        ----------
+        k_bnn : np.ndarray
+            Reweighted BNN samples, of shape [n_test, Y_dim, n_samples]
+        """
+        k_bnn = np.transpose(k_bnn, [2, 0, 1])  # [n_samples, n_test, Y_dim=1]
         y_mean = np.mean(k_bnn, axis=0)
         k_val = self.get_true_kappa(is_train=False)
         train_cov = self.Y_std.cpu().numpy()

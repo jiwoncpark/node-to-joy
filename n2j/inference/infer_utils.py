@@ -10,6 +10,8 @@ from scipy import stats, special
 import emcee
 import matplotlib.pyplot as plt
 
+DEBUG = False
+
 
 def get_normal_logpdf(mu, log_sigma, x,
                       bounds_lower=-np.inf,
@@ -173,7 +175,7 @@ def get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                                           log_p_k_given_omega_func=log_p_k_given_omega_func,
                                           log_p_k_given_omega_int=log_p_k_given_omega_int
                                           )
-    if True:
+    if DEBUG:
         print("int", log_p_k_given_omega_int.shape)
         print("kbnn", k_bnn.shape)
         np.save('num.npy', log_p_k_given_omega_func(0.01, np.log(0.04)))
@@ -300,12 +302,15 @@ def get_kappa_log_weights_vectorized(k_bnn, omega_post_samples, log_p_k_given_om
     return weights
 
 
-def resample_from_pdf(grid, pdf, n_samples):
-    if n_samples > grid:
+def resample_from_pdf(grid, log_pdf, n_samples):
+    if n_samples > len(grid):
         fine_grid = np.linspace(grid.min(), grid.max(), n_samples*5)
-        pdf = np.interp(fine_grid, grid, pdf)
+        pdf = np.interp(fine_grid, grid, np.exp(log_pdf))
     else:
         fine_grid = grid
+        pdf = np.exp(log_pdf)
+    # Normalize to unity
+    pdf = pdf/np.sum(pdf)
     resampled = np.random.choice(fine_grid,
                                  size=n_samples,
                                  replace=True,
