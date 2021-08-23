@@ -626,6 +626,76 @@ class InferenceManager:
         ax.set_xlabel(r'$\kappa$')
         ax.legend()
 
+    def compute_metrics(self):
+        """Evaluate metrics for model selection
+        """
+        columns = ['minus_sig', 'med', 'plus_sig']
+        columns += ['log_p', 'mad', 'mae']
+        # mae = median absolute errors, robust measure of accuracy
+        # mad = median absolute deviation, robust measure of precision
+        # Metrics on pre-reweighting BNN posteriors
+        k_bnn_pre = self.get_bnn_kappa()
+        pre_metrics = pd.DataFrame(columns=columns)
+        # Metrics on post-reweighting BNN posteriors
+        k_bnn_post = self.get_reweighted_bnn_kappa(None, None)
+        post_metrics = pd.DataFrame(columns=columns)
+        # True kappa
+        k_test = self.get_true_kappa(is_train=False).squeeze()
+        n_test = len(k_test)
+        for i in range(n_test):
+            # Init rows to append
+            pre_stats = dict()
+            post_stats = dict()
+            # Slice samples for this sightline
+            pre_samples = k_bnn_pre[i, 0, :]
+            post_samples = k_bnn_post[i, 0, :]
+            # Evaluate log p at truth
+            true_k = k_test[i]
+            pre_log_p = np.log(np.load(osp.join(self.out_dir,
+                                                f'grid_bnn_gmm_{i}.npy')))
+            grid, post_log_p = self.get_kappa_log_weights_grid(i)
+            # Make finer resolution
+            fine_grid = np.linspace(-0.2, 0.2, 10000)
+            fine_pre_log_p = np.interp(fine_grid, grid, pre_log_p)
+            fine_post_log_p = np.interp(fine_grid, grid, post_log_p)
+            # Evaluate fine log p at truth
+            true_i = np.argmin(np.abs(fine_grid - true_k))
+            pre_stats.update(log_p=fine_pre_log_p[true_i])
+            post_stats.update(log_p=fine_post_log_p[true_i])
+            # Compute descriptive stats
+            lower, med, upper = np.quantile(pre_samples,
+                                            [0.5-0.34, 0.5, 0.5+0.34])
+            pre_stats.update(minus_sig=med - lower,
+                             med=med,
+                             plus_sig=upper - med,
+                             mae=np.median(np.abs(pre_samples - true_k)),
+                             mad=scipy.stats.median_abs_deviation(pre_samples))
+            lower, med, upper = np.quantile(post_samples,
+                                            [0.5-0.34, 0.5, 0.5+0.34])
+            post_stats.update(minus_sig=med - lower,
+                              med=med,
+                              plus_sig=upper - med,
+                              mae=np.median(np.abs(post_samples - true_k)),
+                              mad=scipy.stats.median_abs_deviation(post_samples))
+            pre_metrics = pre_metrics.append(pre_stats,
+                                             ignore_index=True)
+            post_metrics = post_metrics.append(post_stats,
+                                               ignore_index=True)
+        # Evaluate average metrics over entire test set
+        pre_metrics = pre_metrics.append(pre_metrics.mean(),
+                                         ignore_index=True)
+        pre_metrics = pre_metrics.append(pre_metrics.median(),
+                                         ignore_index=True)
+        post_metrics = post_metrics.append(post_metrics.mean(),
+                                           ignore_index=True)
+        post_metrics = post_metrics.append(post_metrics.median(),
+                                           ignore_index=True)
+        # Save as CSV
+        pre_metrics.to_csv(osp.join(self.out_dir, 'pre_metrics.csv'),
+                           index=False)
+        post_metrics.to_csv(osp.join(self.out_dir, 'post_metrics.csv'),
+                            index=False)
+
     def get_calibration_plot(self, k_bnn):
         """Plot calibration (should be run on the validation set)
 
