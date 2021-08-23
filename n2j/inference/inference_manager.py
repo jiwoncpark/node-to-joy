@@ -626,6 +626,16 @@ class InferenceManager:
         ax.set_xlabel(r'$\kappa$')
         ax.legend()
 
+    @property
+    def pre_reweighting_metrics(self):
+        return pd.read_csv(osp.join(self.out_dir, 'pre_metrics.csv'),
+                           index_col=False)
+
+    @property
+    def post_reweighting_metrics(self):
+        return pd.read_csv(osp.join(self.out_dir, 'post_metrics.csv'),
+                           index_col=False)
+
     def compute_metrics(self):
         """Evaluate metrics for model selection
         """
