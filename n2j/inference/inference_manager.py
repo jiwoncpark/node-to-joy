@@ -246,7 +246,8 @@ class InferenceManager:
             path of the state dict to load
 
         """
-        state = torch.load(state_path)
+        state = torch.load(state_path,
+                           map_location=torch.device(self.device_type))
         self.model.load_state_dict(state['model'])
         self.model.to(self.device)
         self.epoch = state['epoch']
