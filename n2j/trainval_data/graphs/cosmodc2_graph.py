@@ -397,7 +397,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
 
     def _get_y_class(self, y):
         y_class = torch.bucketize(y[:, 0],  # only kappa
-                                  boundaries=torch.Tensor([0.0, 0.03, 0.05, 10.0]))
+                                  boundaries=torch.Tensor([0.0, 0.03, 0.05, 1.e6]))
         return y_class
 
     def process_single(self, i):
