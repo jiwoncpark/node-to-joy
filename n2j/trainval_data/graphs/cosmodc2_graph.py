@@ -102,7 +102,7 @@ class CosmoDC2Graph(ConcatDataset):
         dummy_loader = DataLoader(self,
                                   batch_size=batch_size,
                                   shuffle=False,
-                                  num_workers=2,
+                                  num_workers=18,
                                   drop_last=False)
         print("Generating standardizing metadata...")
         for i, b in enumerate(dummy_loader):
