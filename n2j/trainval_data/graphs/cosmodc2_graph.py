@@ -109,8 +109,10 @@ class CosmoDC2Graph(ConcatDataset):
             # Update running stats for this new batch
             rs.update(b, i)
             # Update running bin count for kappa
-            y_class_counts += torch.bincount(b.y_class, minlength=4)[:4]
-            y_class[i*batch_size:(i+1)*batch_size] = b.y_class
+            y_class_b = b.y_class
+            y_class_b[y_class_b > 3] = 3
+            y_class_counts += torch.bincount(y_class_b, minlength=4)[:4]
+            y_class[i*batch_size:(i+1)*batch_size] = y_class_b
             # Log original kappa values
             k_values_orig_batch = b.y[:, 0].cpu().numpy()
             y_values_orig[i*batch_size:(i+1)*batch_size] = k_values_orig_batch
@@ -146,7 +148,7 @@ class CosmoDC2Graph(ConcatDataset):
             sampling_loader = DataLoader(self,
                                          batch_size=batch_size,
                                          sampler=sampler,
-                                         num_workers=2,
+                                         num_workers=18,
                                          drop_last=False)
             for i, b in enumerate(sampling_loader):
                 # Update running stats for this new batch
