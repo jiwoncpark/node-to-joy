@@ -109,7 +109,7 @@ class CosmoDC2Graph(ConcatDataset):
             # Update running stats for this new batch
             rs.update(b, i)
             # Update running bin count for kappa
-            y_class_counts += torch.bincount(b.y_class, minlength=4)
+            y_class_counts += torch.bincount(b.y_class, minlength=4)[:4]
             y_class[i*batch_size:(i+1)*batch_size] = b.y_class
             # Log original kappa values
             k_values_orig_batch = b.y[:, 0].cpu().numpy()
