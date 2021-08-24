@@ -181,7 +181,7 @@ class CosmoDC2Graph(ConcatDataset):
         dummy_loader = DataLoader(self,  # val_dataset
                                   batch_size=B,
                                   shuffle=False,
-                                  num_workers=2,
+                                  num_workers=18,
                                   drop_last=False)
         # If subsample_pdf_func is None, don't need this attribute
         assert self.subsample_pdf_func is not None
