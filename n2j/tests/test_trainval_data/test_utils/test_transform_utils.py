@@ -1,9 +1,67 @@
 import unittest
 import numpy as np
 import torch
-from n2j.trainval_data.utils.transform_utils import (MagErrorSimulator,
+from n2j.trainval_data.utils.transform_utils import (Rejector,
+                                                     MagErrorSimulator,
                                                      MagErrorSimulatorTorch,
                                                      get_bands_in_x)
+
+
+class TestRejector(unittest.TestCase):
+    """A suite of tests verifying the magnitude Rejector methods
+
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.x = torch.arange(12).reshape([4, 3])  # tensor to transform
+        cls.x_np = cls.x.cpu().numpy()
+        # array([[ 0,  1,  2],
+        # [ 3,  4,  5],
+        # [ 6,  7,  8],
+        # [ 9, 10, 11]])
+
+    def test_default(self):
+        """Test no input (defaults), which should do nothing
+        """
+        rej = Rejector(**{})
+        np.testing.assert_array_equal(rej(self.x), self.x)
+
+    def test_min_only(self):
+        """Test when only min_vals is provided, partial or full
+        """
+        # Partial min_vals
+        detection_kwargs = {'ref_features': ['c', 'b'],
+                            'min_vals': [4.5, None]}
+        rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
+        expected = torch.tensor([[3, 4, 5],
+                                 [6, 7, 8],
+                                 [9, 10, 11]])
+        np.testing.assert_array_equal(rej(self.x), expected)
+        # Full min_vals
+        detection_kwargs = {'ref_features': ['c', 'b'],
+                            'min_vals': [4.5, 6]}
+        rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
+        expected = torch.tensor([[6, 7, 8],
+                                 [9, 10, 11]])
+        np.testing.assert_array_equal(rej(self.x), expected)
+
+    def test_max_only(self):
+        """Test when only max_vals is provided, partial or full
+        """
+        # Partial max_vals
+        detection_kwargs = {'ref_features': ['c', 'b'],
+                            'max_vals': [None, 5]}
+        rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
+        expected = torch.tensor([[0, 1, 2],
+                                 [3, 4, 5]])
+        np.testing.assert_array_equal(rej(self.x), expected)
+        # Full max_vals
+        detection_kwargs = {'ref_features': ['c', 'b'],
+                            'max_vals': [9, 5]}
+        rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
+        expected = torch.tensor([[0, 1, 2],
+                                 [3, 4, 5]])
+        np.testing.assert_array_equal(rej(self.x), expected)
 
 
 def test_get_bands_in_x():
@@ -27,7 +85,7 @@ class TestMagErrorSimulator(unittest.TestCase):
         pass
 
     def test_basic(self):
-        """Verify correspondence with same analytic function in Collab notebook
+        """Verify correspondence with same analytic function in Colab notebook
 
         """
         mes = MagErrorSimulator()

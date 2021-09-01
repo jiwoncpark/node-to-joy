@@ -5,6 +5,13 @@ import numpy as np
 import torch
 
 
+def get_idx(orig_list, sub_list):
+    idx = []
+    for item in sub_list:
+        idx.append(orig_list.index(item))
+    return idx
+
+
 class Standardizer:
     def __init__(self, mean, std):
         self.mean = mean
@@ -20,6 +27,54 @@ class Slicer:
 
     def __call__(self, x):
         return x[:, self.feature_idx]
+
+
+class Rejector:
+    def __init__(self, all_features=[],
+                 ref_features=[],
+                 max_vals=None,
+                 min_vals=None):
+        """Transform class for rejecting nodes based on feature value
+
+        Parameters
+        ----------
+        all_features : list, optional
+            All the existing features, including reference features to
+            base rejection on
+        ref_features : list, optional
+            Reference features to base rejection on
+        max_vals : None, optional
+            Maximum allowed values for the ref_features.
+            Must be same length as feature_idx
+        min_vals : None, optional
+            Minimum allowed values for the ref_features
+            Must be same length as feature_idx
+        """
+        self.feature_idx = get_idx(all_features, ref_features)
+        self.n_features = len(self.feature_idx)
+        if self.n_features > 0:
+            if max_vals is None:
+                max_vals = [None]*self.n_features
+            if min_vals is None:
+                min_vals = [None]*self.n_features
+            assert len(min_vals) == self.n_features
+            assert len(max_vals) == self.n_features
+            # Handle null values within provided lists
+            max_vals = [float('inf') if v is None else v for v in max_vals]
+            min_vals = [float('-inf') if v is None else v for v in min_vals]
+            # Convert into torch tensors with broadcastable shape
+            self.max_vals = torch.tensor(max_vals).reshape([1, self.n_features])
+            self.min_vals = torch.tensor(min_vals).reshape([1, self.n_features])
+
+    def __call__(self, x):
+        if self.n_features == 0:
+            return x  # do nothing
+        ref = x[:, self.feature_idx]  # [B, n_features]
+        mask = torch.logical_and(ref < self.max_vals,
+                                 ref > self.min_vals)  # [B, n_features]
+        mask = mask.all(dim=1)  # [B,]
+        print(x[mask, :][:5, self.feature_idx])
+        return x[mask, :]
 
 
 def get_bands_in_x(x_cols):

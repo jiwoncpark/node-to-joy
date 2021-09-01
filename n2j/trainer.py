@@ -19,15 +19,10 @@ import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import (Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
-                                                     get_bands_in_x)
+                                                     Rejector,
+                                                     get_bands_in_x,
+                                                     get_idx)
 import matplotlib.pyplot as plt
-
-
-def get_idx(orig_list, sub_list):
-    idx = []
-    for item in sub_list:
-        idx.append(orig_list.index(item))
-    return idx
 
 
 def is_decreasing(arr):
@@ -68,11 +63,9 @@ class Trainer:
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
                      rebin=False, num_workers=2,
-                     noise_kwargs=dict(mag=dict(
-                                                override_kwargs=None,
-                                                depth=5,
-                                                )
-                                       )):
+                     noise_kwargs={'mag': {'override_kwargs': None,
+                                           'depth': 5}},
+                     detection_kwargs={}):
         """Load dataset and dataloader for training or validation
 
         Note
@@ -110,24 +103,21 @@ class Trainer:
                 stats = self.train_dataset.data_stats
                 torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
-            if sub_features:
-                idx = get_idx(features, sub_features)
-                self.X_mean = stats['X_mean'][:, idx]
-                self.X_std = stats['X_std'][:, idx]
-                slicing = Slicer(idx)
-                mag_idx, which_bands = get_bands_in_x(sub_features)
-                print(f"Mag errors added to {which_bands}")
-                magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
-                                                which_bands=which_bands,
-                                                **noise_kwargs['mag'])
-                norming = Standardizer(self.X_mean, self.X_std)
-                self.transform_X = transforms.Compose([slicing,
-                                                      magerr,
-                                                      norming])
-            else:
-                self.X_mean = stats['X_mean']
-                self.X_std = stats['X_std']
-                self.transform_X = Standardizer(self.X_mean, self.X_std)
+            idx = get_idx(features, self.sub_features)
+            self.X_mean = stats['X_mean'][:, idx]
+            self.X_std = stats['X_std'][:, idx]
+            slicing = Slicer(idx)
+            mag_idx, which_bands = get_bands_in_x(self.sub_features)
+            print(f"Mag errors added to {which_bands}")
+            magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
+                                            which_bands=which_bands,
+                                            **noise_kwargs['mag'])
+            magcut = Rejector(self.sub_features, **detection_kwargs)
+            norming = Standardizer(self.X_mean, self.X_std)
+            self.transform_X = transforms.Compose([slicing,
+                                                  magerr,
+                                                  magcut,
+                                                  norming])
             # Transforming global Y
             if sub_target:
                 idx_Y = get_idx(target, sub_target)
