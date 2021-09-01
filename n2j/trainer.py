@@ -91,7 +91,7 @@ class Trainer:
         target_local = ['halo_mass', 'stellar_mass', 'redshift']
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
-        dataset = CosmoDC2Graph(**data_kwargs)
+        dataset = CosmoDC2Graph(num_workers=self.num_workers, **data_kwargs)
         ############
         # Training #
         ############

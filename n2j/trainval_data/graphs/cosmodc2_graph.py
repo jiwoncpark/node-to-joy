@@ -28,7 +28,7 @@ class CosmoDC2Graph(ConcatDataset):
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
                  n_data, features, subsample_pdf_func=None,
                  n_subsample=None, subsample_with_replacement=True,
-                 stop_mean_std_early=False, n_cores=20):
+                 stop_mean_std_early=False, n_cores=20, num_workers=4):
         """Summary
 
         Parameters
@@ -58,6 +58,7 @@ class CosmoDC2Graph(ConcatDataset):
         self.stop_mean_std_early = stop_mean_std_early
         self.n_datasets = len(healpixes)
         self.n_cores = n_cores
+        self.num_workers = num_workers
         self.subsample_pdf_func = subsample_pdf_func
         if self.subsample_pdf_func is not None:
             assert n_subsample is not None
@@ -102,7 +103,7 @@ class CosmoDC2Graph(ConcatDataset):
         dummy_loader = DataLoader(self,
                                   batch_size=batch_size,
                                   shuffle=False,
-                                  num_workers=18,
+                                  num_workers=self.num_workers,
                                   drop_last=False)
         print("Generating standardizing metadata...")
         for i, b in enumerate(dummy_loader):
@@ -148,7 +149,7 @@ class CosmoDC2Graph(ConcatDataset):
             sampling_loader = DataLoader(self,
                                          batch_size=batch_size,
                                          sampler=sampler,
-                                         num_workers=18,
+                                         num_workers=self.num_workers,
                                          drop_last=False)
             for i, b in enumerate(sampling_loader):
                 # Update running stats for this new batch
@@ -181,7 +182,7 @@ class CosmoDC2Graph(ConcatDataset):
         dummy_loader = DataLoader(self,  # val_dataset
                                   batch_size=B,
                                   shuffle=False,
-                                  num_workers=18,
+                                  num_workers=self.num_workers,
                                   drop_last=False)
         # If subsample_pdf_func is None, don't need this attribute
         assert self.subsample_pdf_func is not None

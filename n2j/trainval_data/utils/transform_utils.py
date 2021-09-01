@@ -73,7 +73,6 @@ class Rejector:
         mask = torch.logical_and(ref < self.max_vals,
                                  ref > self.min_vals)  # [B, n_features]
         mask = mask.all(dim=1)  # [B,]
-        print(x[mask, :][:5, self.feature_idx])
         return x[mask, :]
 
 
