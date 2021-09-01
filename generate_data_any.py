@@ -1,11 +1,7 @@
 """Script to generate training data
 
 """
-import os
 import argparse
-import sys
-import cProfile
-import numpy as np
 from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
 
