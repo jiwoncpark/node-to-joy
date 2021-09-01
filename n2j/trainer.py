@@ -12,11 +12,12 @@ import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-from torch.utils.data.sampler import WeightedRandomSampler, SubsetRandomSampler
+from torch.utils.data.sampler import WeightedRandomSampler
 from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
-from n2j.trainval_data.utils.transform_utils import (Standardizer,
+from n2j.trainval_data.utils.transform_utils import (ComposeXYLocal,
+                                                     Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
                                                      Rejector,
@@ -114,20 +115,6 @@ class Trainer:
                                             **noise_kwargs['mag'])
             magcut = Rejector(self.sub_features, **detection_kwargs)
             norming = Standardizer(self.X_mean, self.X_std)
-            self.transform_X = transforms.Compose([slicing,
-                                                  magerr,
-                                                  magcut,
-                                                  norming])
-            # Transforming global Y
-            if sub_target:
-                idx_Y = get_idx(target, sub_target)
-                self.Y_mean = stats['Y_mean'][:, idx_Y]
-                self.Y_std = stats['Y_std'][:, idx_Y]
-                slicing_Y = Slicer(idx_Y)
-                norming_Y = Standardizer(self.Y_mean, self.Y_std)
-                self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
-            else:
-                self.transform_Y = Standardizer(self.Y_mean, self.Y_std)
             # Transforming local Y
             idx_Y_local = get_idx(target_local, self.sub_target_local)
             self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
@@ -135,11 +122,21 @@ class Trainer:
             slicing_Y_local = Slicer(idx_Y_local)
             norming_Y_local = Standardizer(self.Y_local_mean,
                                            self.Y_local_std)
-            self.transform_Y_local = transforms.Compose([slicing_Y_local,
-                                                        norming_Y_local])
-            self.train_dataset.transform_X = self.transform_X
+            # TODO: normalization is based on pre-magcut population
+            self.transform_X_Y_local = ComposeXYLocal([slicing, magerr],
+                                                      [slicing_Y_local],
+                                                      [magcut],
+                                                      [norming],
+                                                      [norming_Y_local])
+            # Transforming global Y
+            idx_Y = get_idx(target, self.sub_target)
+            self.Y_mean = stats['Y_mean'][:, idx_Y]
+            self.Y_std = stats['Y_std'][:, idx_Y]
+            slicing_Y = Slicer(idx_Y)
+            norming_Y = Standardizer(self.Y_mean, self.Y_std)
+            self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
+            self.train_dataset.transform_X_Y_local = self.transform_X_Y_local
             self.train_dataset.transform_Y = self.transform_Y
-            self.train_dataset.transform_Y_local = self.transform_Y_local
             # Loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
@@ -185,9 +182,8 @@ class Trainer:
                 else:
                     stats_val = self.val_dataset.data_stats_valtest
                     torch.save(stats_val, stats_val_path)
-            self.val_dataset.transform_X = self.transform_X
+            self.val_dataset.transform_X_Y_local = self.transform_X_Y_local
             self.val_dataset.transform_Y = self.transform_Y
-            self.val_dataset.transform_Y_local = self.transform_Y_local
             # Val loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None

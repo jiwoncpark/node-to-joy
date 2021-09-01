@@ -19,12 +19,16 @@ class TestRejector(unittest.TestCase):
         # [ 3,  4,  5],
         # [ 6,  7,  8],
         # [ 9, 10, 11]])
+        cls.y_local = torch.randn(4, 2)  # placeholder
 
     def test_default(self):
         """Test no input (defaults), which should do nothing
         """
         rej = Rejector(**{})
-        np.testing.assert_array_equal(rej(self.x), self.x)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[0],
+                                      self.x)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[1],
+                                      self.y_local)
 
     def test_min_only(self):
         """Test when only min_vals is provided, partial or full
@@ -36,14 +40,14 @@ class TestRejector(unittest.TestCase):
         expected = torch.tensor([[3, 4, 5],
                                  [6, 7, 8],
                                  [9, 10, 11]])
-        np.testing.assert_array_equal(rej(self.x), expected)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[0], expected)
         # Full min_vals
         detection_kwargs = {'ref_features': ['c', 'b'],
                             'min_vals': [4.5, 6]}
         rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
         expected = torch.tensor([[6, 7, 8],
                                  [9, 10, 11]])
-        np.testing.assert_array_equal(rej(self.x), expected)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[0], expected)
 
     def test_max_only(self):
         """Test when only max_vals is provided, partial or full
@@ -54,14 +58,14 @@ class TestRejector(unittest.TestCase):
         rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
         expected = torch.tensor([[0, 1, 2],
                                  [3, 4, 5]])
-        np.testing.assert_array_equal(rej(self.x), expected)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[0], expected)
         # Full max_vals
         detection_kwargs = {'ref_features': ['c', 'b'],
                             'max_vals': [9, 5]}
         rej = Rejector(['a', 'b', 'c', 'd'], **detection_kwargs)
         expected = torch.tensor([[0, 1, 2],
                                  [3, 4, 5]])
-        np.testing.assert_array_equal(rej(self.x), expected)
+        np.testing.assert_array_equal(rej(self.x, self.y_local)[0], expected)
 
 
 def test_get_bands_in_x():

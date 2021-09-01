@@ -5,6 +5,33 @@ import numpy as np
 import torch
 
 
+class ComposeXYLocal:
+    def __init__(self,
+                 transforms_X_pre,
+                 transforms_Y_local_pre,
+                 transforms_X_Y_local,
+                 transforms_X_post,
+                 transforms_Y_local_post):
+        self.transforms_X_pre = transforms_X_pre
+        self.transforms_Y_local_pre = transforms_Y_local_pre
+        self.transforms_X_Y_local = transforms_X_Y_local
+        self.transforms_X_post = transforms_X_post
+        self.transforms_Y_local_post = transforms_Y_local_post
+
+    def __call__(self, x, y_local):
+        for t in self.transforms_X_pre:
+            x = t(x)
+        for t in self.transforms_Y_local_pre:
+            y_local = t(y_local)
+        for t_joint in self.transforms_X_Y_local:
+            x, y_local = t_joint(x, y_local)
+        for t in self.transforms_X_post:
+            x = t(x)
+        for t in self.transforms_Y_local_post:
+            y_local = t(y_local)
+        return x, y_local
+
+
 def get_idx(orig_list, sub_list):
     idx = []
     for item in sub_list:
@@ -66,14 +93,14 @@ class Rejector:
             self.max_vals = torch.tensor(max_vals).reshape([1, self.n_features])
             self.min_vals = torch.tensor(min_vals).reshape([1, self.n_features])
 
-    def __call__(self, x):
+    def __call__(self, x, y):
         if self.n_features == 0:
-            return x  # do nothing
+            return x, y  # do nothing
         ref = x[:, self.feature_idx]  # [B, n_features]
         mask = torch.logical_and(ref < self.max_vals,
                                  ref > self.min_vals)  # [B, n_features]
         mask = mask.all(dim=1)  # [B,]
-        return x[mask, :]
+        return x[mask, :], y[mask, :]
 
 
 def get_bands_in_x(x_cols):

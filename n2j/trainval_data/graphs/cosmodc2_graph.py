@@ -79,9 +79,8 @@ class CosmoDC2Graph(ConcatDataset):
             Y_list.append(graph_hp.Y)
         self.Y = pd.concat(Y_list, ignore_index=True).reset_index(drop=True)
         ConcatDataset.__init__(self, datasets)
-        self.transform_X = None
+        self.transform_X_Y_local = None
         self.transform_Y = None
-        self.transform_Y_local = None
 
     @cached_property
     def data_stats(self):
@@ -220,12 +219,11 @@ class CosmoDC2Graph(ConcatDataset):
         else:
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         data = self.datasets[dataset_idx][sample_idx]
-        if self.transform_X is not None:
-            data.x = self.transform_X(data.x)
+        if self.transform_X_Y_local is not None:
+            data.x, data.y_local = self.transform_X_Y_local(data.x,
+                                                            data.y_local)
         if self.transform_Y is not None:
             data.y = self.transform_Y(data.y)
-        if self.transform_Y_local is not None:
-            data.y_local = self.transform_Y_local(data.y_local)
         return data
 
 
