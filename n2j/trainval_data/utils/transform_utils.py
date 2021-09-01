@@ -7,11 +7,11 @@ import torch
 
 class ComposeXYLocal:
     def __init__(self,
-                 transforms_X_pre,
-                 transforms_Y_local_pre,
-                 transforms_X_Y_local,
-                 transforms_X_post,
-                 transforms_Y_local_post):
+                 transforms_X_pre=[],
+                 transforms_Y_local_pre=[],
+                 transforms_X_Y_local=[],
+                 transforms_X_post=[],
+                 transforms_Y_local_post=[]):
         self.transforms_X_pre = transforms_X_pre
         self.transforms_Y_local_pre = transforms_Y_local_pre
         self.transforms_X_Y_local = transforms_X_Y_local
