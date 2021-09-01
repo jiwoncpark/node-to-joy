@@ -6,16 +6,16 @@ data:
   train_dist_name: 'norm'
   train_dist_kwargs:
     loc: 0.01
-    scale: 0.03
+    scale: 0.04
   in_dir: '/home/jwp/stage/sl/n2j/n2j/data'
-  train_hp: [10327]
+  train_hp: [10327, 9559]
   val_hp: [10450]
-  n_train: [20000]
-  # Final effective training set size
+  n_train: [10000, 10000]
+    # Final effective training set size
   n_subsample_train: 1000
-  n_val: [20000]
+  n_val: [10000]
   # Final effective val set size
-  n_subsample_val: 100
+  n_subsample_val: 1000
   batch_size: 1000
   val_batch_size: 1000
   num_workers: 4
@@ -42,10 +42,13 @@ data:
     mag:
       override_kwargs: null
       depth: 5
+  detection_kwargs:
+    ref_features: ['mag_i_lsst']
+    max_vals: [22.0]
 # Optimizer kwargs
 optimization:
   early_stop_memory: 50
-  weight_local_loss: 1.0
+  weight_local_loss: 0.0338987896
   optim_kwargs:
     lr: 0.001
     weight_decay: 0.0001
@@ -62,14 +65,14 @@ model:
   dim_pre_aggr: 50
   n_iter: 5
   n_out_layers: 5
-  dropout: 0.04
+  dropout: 0.006667011687
   global_flow: False
 # Trainer attributes
 trainer:
   device_type: 'cuda'
-  checkpoint_dir: '/home/jwp/stage/sl/n2j/results/E1'
+  checkpoint_dir: 'results/E1'
   seed: 1028
-n_epochs: 200
+n_epochs: 5
 # If you want to resume training from a checkpoint
 resume_from:
   checkpoint_path: null
@@ -78,22 +81,27 @@ resume_from:
 #############
 inference_manager:
   device_type: 'cuda'
-  out_dir: '/home/jwp/stage/sl/n2j/inference_results/E1'
+  out_dir: 'results/E1/inference'
   seed: 1028
 test_data:
-  test_hp: [10326]
+  batch_size: 100
+  test_hp: [10450]
   n_test: [50000]
   n_subsample_test: 100
-  batch_size: 100
   dist_name: 'norm'
   dist_kwargs:
-    loc: 0.04
-    scale: 0.005
-checkpoint_path: "/home/jwp/stage/sl/n2j/results/E3/N2JNet_epoch=198_07-12-2021_06:36.mdl"
-run_mcmc: True
+    loc: 0.01
+    scale: 0.04
+summary_stats:
+  thresholds:
+    N: [2, 4, 8, 16, 32, 64]
+    N_inv_dist: [32, 64, 128, 256, 1024, 2048]
+# Replace with your own
+checkpoint_path: '/home/jwp/stage/sl/n2j/tuning/T8/N2JNet_epoch=82_08-08-2021_03:24.mdl'
+run_mcmc: False
 extra_mcmc_kwargs:
   n_run: 200
-  n_burn: 1000
+  n_burn: 20
   n_walkers: 20
   plot_chain: True
   clear: True

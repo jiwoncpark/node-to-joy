@@ -42,6 +42,9 @@ data:
     mag:
       override_kwargs: null
       depth: 5
+  detection_kwargs:
+    ref_features: ['mag_i_lsst']
+    max_vals: [22.0]
 # Optimizer kwargs
 optimization:
   early_stop_memory: 50
