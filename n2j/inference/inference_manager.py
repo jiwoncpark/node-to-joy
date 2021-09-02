@@ -4,8 +4,6 @@
 import os
 import os.path as osp
 import random
-import datetime
-import json
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -19,19 +17,15 @@ import n2j.models as models
 import n2j.inference.infer_utils as iutils
 import matplotlib.pyplot as plt
 import corner
-from n2j.trainval_data.utils.transform_utils import (Standardizer,
+from n2j.trainval_data.utils.transform_utils import (ComposeXYLocal,
+                                                     Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
-                                                     get_bands_in_x)
+                                                     Rejector,
+                                                     get_bands_in_x,
+                                                     get_idx)
 import n2j.inference.summary_stats_baseline as ssb
 import n2j.inference.calibration as calib
-
-
-def get_idx(orig_list, sub_list):
-    idx = []
-    for item in sub_list:
-        idx.append(orig_list.index(item))
-    return idx
 
 
 class InferenceManager:
@@ -71,11 +65,9 @@ class InferenceManager:
     def load_dataset(self, data_kwargs, is_train, batch_size,
                      sub_features=None, sub_target=None, sub_target_local=None,
                      rebin=False, num_workers=2,
-                     noise_kwargs=dict(mag=dict(
-                                                override_kwargs=None,
-                                                depth=5,
-                                                )
-                                       )):
+                     noise_kwargs={'mag': {'override_kwargs': None,
+                                           'depth': 5}},
+                     detection_kwargs={}):
         """Load dataset and dataloader for training or validation
 
         Note
@@ -101,7 +93,7 @@ class InferenceManager:
         target_local = ['halo_mass', 'stellar_mass', 'redshift']
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
-        dataset = CosmoDC2Graph(**data_kwargs)
+        dataset = CosmoDC2Graph(num_workers=self.num_workers, **data_kwargs)
         ############
         # Training #
         ############
@@ -113,50 +105,39 @@ class InferenceManager:
                 stats = self.train_dataset.data_stats
                 torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
             # Transforming X
-            if sub_features:
-                idx = get_idx(features, sub_features)
-                self.X_mean = stats['X_mean'][:, idx]
-                self.X_std = stats['X_std'][:, idx]
-                slicing = Slicer(idx)
-                mag_idx, which_bands = get_bands_in_x(sub_features)
-                print(f"Mag errors added to {which_bands}")
-                magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
-                                                which_bands=which_bands,
-                                                **noise_kwargs['mag'])
-                norming = Standardizer(self.X_mean, self.X_std)
-                self.transform_X = transforms.Compose([slicing,
-                                                      magerr,
-                                                      norming])
-            else:
-                self.X_mean = stats['X_mean']
-                self.X_std = stats['X_std']
-                self.transform_X = Standardizer(self.X_mean, self.X_std)
-            # Transforming global Y
-            if sub_target:
-                idx_Y = get_idx(target, sub_target)
-                self.Y_mean = stats['Y_mean'][:, idx_Y]
-                self.Y_std = stats['Y_std'][:, idx_Y]
-                slicing_Y = Slicer(idx_Y)
-                norming_Y = Standardizer(self.Y_mean, self.Y_std)
-                self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
-            else:
-                self.transform_Y = Standardizer(self.Y_mean, self.Y_std)
+            idx = get_idx(features, self.sub_features)
+            self.X_mean = stats['X_mean'][:, idx]
+            self.X_std = stats['X_std'][:, idx]
+            slicing = Slicer(idx)
+            mag_idx, which_bands = get_bands_in_x(self.sub_features)
+            print(f"Mag errors added to {which_bands}")
+            magerr = MagErrorSimulatorTorch(mag_idx=mag_idx,
+                                            which_bands=which_bands,
+                                            **noise_kwargs['mag'])
+            magcut = Rejector(self.sub_features, **detection_kwargs)
+            norming = Standardizer(self.X_mean, self.X_std)
             # Transforming local Y
-            if sub_target_local:
-                idx_Y_local = get_idx(target_local, sub_target_local)
-                self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
-                self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
-                slicing_Y_local = Slicer(idx_Y_local)
-                norming_Y_local = Standardizer(self.Y_local_mean,
-                                               self.Y_local_std)
-                self.transform_Y_local = transforms.Compose([slicing_Y_local,
-                                                            norming_Y_local])
-            else:
-                self.transform_Y_local = Standardizer(self.Y_local_mean,
-                                                      self.Y_local_std)
-            self.train_dataset.transform_X = self.transform_X
+            idx_Y_local = get_idx(target_local, self.sub_target_local)
+            self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
+            self.Y_local_std = stats['Y_local_std'][:, idx_Y_local]
+            slicing_Y_local = Slicer(idx_Y_local)
+            norming_Y_local = Standardizer(self.Y_local_mean,
+                                           self.Y_local_std)
+            # TODO: normalization is based on pre-magcut population
+            self.transform_X_Y_local = ComposeXYLocal([slicing, magerr],
+                                                      [slicing_Y_local],
+                                                      [magcut],
+                                                      [norming],
+                                                      [norming_Y_local])
+            # Transforming global Y
+            idx_Y = get_idx(target, self.sub_target)
+            self.Y_mean = stats['Y_mean'][:, idx_Y]
+            self.Y_std = stats['Y_std'][:, idx_Y]
+            slicing_Y = Slicer(idx_Y)
+            norming_Y = Standardizer(self.Y_mean, self.Y_std)
+            self.transform_Y = transforms.Compose([slicing_Y, norming_Y])
+            self.train_dataset.transform_X_Y_local = self.transform_X_Y_local
             self.train_dataset.transform_Y = self.transform_Y
-            self.train_dataset.transform_Y_local = self.transform_Y_local
             # Loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
@@ -188,25 +169,24 @@ class InferenceManager:
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
             print(f"Train dataset size: {len(self.train_dataset)}")
-        #################
-        # Test (or val) #
-        #################
+        ###################
+        # Validation/Test #
+        ###################
         else:
             self.test_dataset = dataset
             # Compute or retrieve stats necessary for resampling
             # before setting any kind of transforms
-            # Note: stats_test.pt is in our_dir, not checkpoint_dir
+            # Note: stats_test.pt is in inference out_dir, not checkpoint_dir
             if data_kwargs['subsample_pdf_func'] is not None:
-                stats_test_path = osp.join(self.out_dir, 'stats_test.pt')
+                stats_test_path = osp.join(self.checkpoint_dir, 'stats_test.pt')
                 if osp.exists(stats_test_path):
                     stats_test = torch.load(stats_test_path)
                 else:
                     stats_test = self.test_dataset.data_stats_valtest
                     torch.save(stats_test, stats_test_path)
-            self.test_dataset.transform_X = self.transform_X
+            self.test_dataset.transform_X_Y_local = self.transform_X_Y_local
             self.test_dataset.transform_Y = self.transform_Y
-            self.test_dataset.transform_Y_local = self.transform_Y_local
-            # Test loading option 1: Subsample from a distribution
+            # Val/test loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
                 self.class_weight = None
                 test_subset = torch.utils.data.Subset(self.test_dataset,
@@ -218,7 +198,7 @@ class InferenceManager:
                                               num_workers=self.num_workers,
                                               drop_last=False)
             else:
-                # Test loading option 2: No special sampling, no shuffle
+                # Val/test loading option 2: No special sampling, no shuffle
                 self.class_weight = None
                 self.test_loader = DataLoader(self.test_dataset,
                                               batch_size=batch_size,
