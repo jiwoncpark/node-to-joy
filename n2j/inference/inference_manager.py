@@ -178,7 +178,7 @@ class InferenceManager:
             # before setting any kind of transforms
             # Note: stats_test.pt is in inference out_dir, not checkpoint_dir
             if data_kwargs['subsample_pdf_func'] is not None:
-                stats_test_path = osp.join(self.checkpoint_dir, 'stats_test.pt')
+                stats_test_path = osp.join(self.out_dir, 'stats_test.pt')
                 if osp.exists(stats_test_path):
                     stats_test = torch.load(stats_test_path)
                 else:
