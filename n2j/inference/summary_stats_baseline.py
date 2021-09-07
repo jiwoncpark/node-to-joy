@@ -154,7 +154,7 @@ class Matcher:
                                          'minus_1sig',
                                          'logp'
                                          'mad',
-                                         'ae'])
+                                         'mae'])
         for i in tqdm(range(n_test), desc="matching"):
             for s in ss_names:
                 test_x = self.test_stats.stats[s][i]
@@ -187,7 +187,7 @@ class Matcher:
                                                      bw_method='scott')
                             true_k = self.test_y[i, 0]
                             row.update(logp=kde.logpdf(true_k),
-                                       ae=np.abs(med - true_k),
+                                       mae=np.median(np.abs(accepted - true_k)),
                                        true_k=true_k
                                        )
                     overview = overview.append(row, ignore_index=True)
