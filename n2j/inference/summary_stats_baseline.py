@@ -191,6 +191,8 @@ class Matcher:
                                        true_k=true_k
                                        )
                     overview = overview.append(row, ignore_index=True)
+        overview = overview.append(overview.mean(), ignore_index=True)
+        overview = overview.append(overview.median(), ignore_index=True)
         overview.to_csv(self.overview_path, index=False)
 
     def get_overview_table(self):
