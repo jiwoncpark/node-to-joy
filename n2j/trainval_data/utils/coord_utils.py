@@ -8,6 +8,7 @@ import numpy as np
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+from matplotlib import path
 
 TWO_PI = 2*np.pi
 
@@ -103,6 +104,88 @@ def get_healpix_centers(pix_id, nside, nest):
     theta, phi = hp.pix2ang(nside, pix_id, nest=nest)
     ra, dec = np.degrees(phi), -np.degrees(theta-0.5*np.pi)
     return ra, dec
+
+
+def get_padded_nside(padding, nside_in):
+    """Get the maximum nside (finest healpix grid) whose centers along
+    the boundary of the input nside are located sufficiently far away
+    from the boundaries
+
+    Parameters
+    ----------
+    padding : float
+        Padding in arcmin
+    nside_in : int
+        NSIDE of the healpix to upgrade
+    """
+    size = hp.nside2resol(nside_in, arcmin=True)
+    # size of each subpix > padding so
+    # big hp size in arcmin / how many to divide into > padding
+    # size of big hp / 2^(order diff) > padding
+    # since each order increase divides each side by half
+    order_diff = (np.log(size) - np.log(padding))/np.log(2)
+    print(size)
+    order_diff = int(order_diff)
+    return nside_in*2**order_diff
+
+
+def get_corners(n_pix, counterclockwise=False):
+    """Get the indices of corners of a set of finer healpixes making up
+    a big healpix, e.g. the output of `upgrade_healpix`
+
+    Parameters
+    ----------
+    n_pix : int
+        Number of finer healpixes
+    clockwise: bool
+        Ordering of the corners are counterclockwise. If False,
+        ordering follows healpix ordering. Default: False
+
+    Returns
+    -------
+    list
+        Indices of four corners that can be used
+        to slice a list of RA, Dec
+
+    """
+    indices = []
+    for place in [0, 1, 2, 3]:  # four corners
+        idx = 0
+        for i in range(int(np.log(n_pix)/np.log(4))):
+            idx += n_pix//(4**(i+1))*place
+        indices.append(int(idx))
+    if counterclockwise:
+        idx_2_val = indices[3]  # don't need to store both
+        idx_3_val = indices[2]
+        indices[2] = idx_2_val
+        indices[3] = idx_3_val
+    return indices
+
+
+def is_inside(ra, dec, ra_bounds, dec_bounds):
+    """Get the boolean mask for whether points are inside provided bounds
+
+    Parameters
+    ----------
+    ra : np.ndarray
+        RA of candidate positions, of shape [N,]
+    dec : np.ndarray
+        Dec of candidate positions, of shape [N,]
+    ra_bounds : np.ndarray
+        RA of bounds, of shape [4,]
+    dec_bounds : np.ndarray
+        Dec of bounds, of shape [4,]
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask over ra, dec, whose elements are true if corresponding
+        points are inside bounds
+
+    """
+    p = path.Path(list(zip(ra_bounds, dec_bounds)))
+    mask = p.contains_points(list(zip(ra, dec)))
+    return mask
 
 
 def get_skycoord(ra, dec):
