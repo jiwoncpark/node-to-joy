@@ -17,6 +17,16 @@ class TestCoordUtils(unittest.TestCase):
         """
         pass
 
+    def test_get_padded_nside(self):
+        """Test get_padded_nside for correctness
+        """
+        actual = cu.get_padded_nside(padding=15.0, nside_in=32)
+        expected = 128
+        np.testing.assert_equal(actual, expected)
+        actual = cu.get_padded_nside(padding=30.0, nside_in=32)
+        expected = 64
+        np.testing.assert_equal(actual, expected)
+
     def test_get_target_nside(self):
         """Test if the correct target NSIDE is returned
 

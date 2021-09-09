@@ -124,7 +124,6 @@ def get_padded_nside(padding, nside_in):
     # size of big hp / 2^(order diff) > padding
     # since each order increase divides each side by half
     order_diff = (np.log(size) - np.log(padding))/np.log(2)
-    print(size)
     order_diff = int(order_diff)
     return nside_in*2**order_diff
 
