@@ -41,7 +41,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
         out_dir : str or os.path
             where Y labels will be stored
         fov : float
-            field of view in arcmin
+            diameter of field of view in arcmin
         healpix : int
             healpix ID that will be supersampled
         approx_z_src : float
@@ -173,12 +173,30 @@ class CosmoDC2Raytracer(BaseRaytracer):
         # Get centroids of D partitions by gridding the sky area and querying a
         # galaxy closest to each grid center at redshift z > self.approx_z_src
         # Each partition, centered at that galaxy, corresponds to an LOS
-        target_nside = cu.get_target_nside(self.n_sightlines,
-                                           nside_in=self.NSIDE)
-        sightline_ids = cu.upgrade_healpix(self.healpix, False,
-                                           self.NSIDE, target_nside)
-        ra_grid, dec_grid = cu.get_healpix_centers(sightline_ids, target_nside,
-                                                   nest=True)
+        if False:
+            target_nside = cu.get_target_nside(self.n_sightlines,
+                                               nside_in=self.NSIDE)
+            sightline_ids = cu.upgrade_healpix(self.healpix, False,
+                                               self.NSIDE, target_nside)
+            ra_grid, dec_grid = cu.get_healpix_centers(sightline_ids, target_nside,
+                                                       nest=True)
+        need_more = True
+        padded_nside = cu.get_padded_nside(self.fov*0.5, self.NSIDE)
+        while need_more:
+            sightline_ids = cu.upgrade_healpix(self.healpix, False,
+                                               self.NSIDE, padded_nside)
+            ra_pre, dec_pre = cu.get_healpix_centers(sightline_ids,
+                                                     padded_nside,
+                                                     nest=True)
+            corners_i = np.array(cu.get_corners(len(ra_pre),
+                                                counterclockwise=True))
+            ra_corners, dec_corners = ra_pre[corners_i], dec_pre[corners_i]
+            inside_mask = cu.is_inside(ra_pre, dec_pre,
+                                       ra_corners, dec_corners)
+            need_more = sum(inside_mask) < self.n_sightlines
+            if need_more:
+                padded_nside *= 2  # Increase resolution of target NSIDE
+
         # Randomly choose number of sightlines requested
         rand_i = self.rng.choice(np.arange(len(ra_grid)),
                                  size=self.n_sightlines,

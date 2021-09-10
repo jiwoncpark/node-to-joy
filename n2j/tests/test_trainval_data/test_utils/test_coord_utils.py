@@ -27,6 +27,41 @@ class TestCoordUtils(unittest.TestCase):
         expected = 64
         np.testing.assert_equal(actual, expected)
 
+    def test_get_corners(self):
+        """Test get_corners for correctness
+        """
+        # Upgrade by 1 order so there are 4 divisions, the centers
+        # of which make up the corners
+        # upgraded_ids = cu.upgrade_healpix(0, False, 2, 4)  # nested
+        # ra_corners, dec_corners = cu.get_healpix_centers(upgraded_ids,
+        #                                                  4, True)
+        # https://healpix.jpl.nasa.gov/html/intronode4.htm
+        actual = cu.get_corners(4, counterclockwise=False)
+        np.testing.assert_equal(actual, [0, 1, 2, 3])
+        actual = cu.get_corners(4, counterclockwise=True)
+        np.testing.assert_equal(actual, [0, 1, 3, 2])
+
+    def test_is_inside(self):
+        """Test is_inside for correctness
+        """
+        target_nside = cu.get_target_nside(100,
+                                           nside_in=32)
+        sightline_ids = cu.upgrade_healpix(10450, False,
+                                           32, target_nside)
+        ra_grid, dec_grid = cu.get_healpix_centers(sightline_ids,
+                                                   target_nside,
+                                                   nest=True)
+        coords = hp.boundaries(nside=32, pix=10450, step=1)
+        ra_corners, dec_corners = hp.vec2ang(np.transpose(coords),
+                                             lonlat=True)
+        actual = cu.is_inside(ra_grid, dec_grid, ra_corners, dec_corners)
+        np.testing.assert_equal(actual,
+                                np.ones_like(actual).astype(bool))
+        actual = cu.is_inside([66, 67.5, 68.5], [-44, -45, -47],
+                              ra_corners, dec_corners)
+        np.testing.assert_equal(actual,
+                                [False, True, False])
+
     def test_get_target_nside(self):
         """Test if the correct target NSIDE is returned
 
