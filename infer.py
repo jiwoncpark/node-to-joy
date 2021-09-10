@@ -33,7 +33,8 @@ if __name__ == '__main__':
                            batch_size=cfg['data']['batch_size'],
                            num_workers=cfg['data']['num_workers'],
                            rebin=False,
-                           noise_kwargs=cfg['data']['noise_kwargs']
+                           noise_kwargs=cfg['data']['noise_kwargs'],
+                           detection_kwargs=cfg['data'].get('detection_kwargs', {}),
                            )
     # Load test set
     norm_obj_test = getattr(stats, cfg['test_data']['dist_name'])(**cfg['test_data']['dist_kwargs'])
@@ -52,7 +53,8 @@ if __name__ == '__main__':
                            sub_target_local=cfg['data']['sub_target_local'],
                            is_train=False,
                            batch_size=cfg['test_data']['batch_size'],
-                           noise_kwargs=cfg['data']['noise_kwargs']
+                           noise_kwargs=cfg['data']['noise_kwargs'],
+                           detection_kwargs=cfg['data'].get('detection_kwargs', {}),
                            )
     # Define model
     model_kwargs = dict(
