@@ -25,8 +25,8 @@ if __name__ == '__main__':
     # Explicitly sample kappas for ~1000 sightlines first (slow)
     if False:
         kappa_sampler = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                          out_dir=f'/global/cscratch1/sd/jwp/n2j/data/kappa_sampling',
-                                          fov=1.35,
+                                          out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v02/kappa_sampling',
+                                          fov=1.35,  # diameter
                                           healpix=10450,
                                           n_sightlines=1000,  # keep this small
                                           mass_cut=11.0,
@@ -38,14 +38,14 @@ if __name__ == '__main__':
     for hp in TRAIN_HP:
         print(f"Raytracing for healpix {hp}...")
         train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                              out_dir=f'/global/cscratch1/sd/jwp/n2j/data/cosmodc2_{hp}/Y_{hp}',
+                                              out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v02/cosmodc2_{hp}/Y_{hp}',
                                               fov=1.35,
                                               healpix=hp,
                                               n_sightlines=N_TRAIN,  # many more LOS
                                               mass_cut=11.0,
                                               n_kappa_samples=0,
                                               seed=hp,
-                                              kappa_sampling_dir=f'/global/cscratch1/sd/jwp/n2j/data/kappa_sampling')  # no sampling
+                                              kappa_sampling_dir=f'/global/cscratch1/sd/jwp/n2j/data_v02/kappa_sampling')  # no sampling
         train_Y_generator.parallel_raytrace(n_cores=200)
         train_Y_generator.apply_calibration()
 
@@ -70,10 +70,10 @@ if __name__ == '__main__':
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
 
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
+                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data_v02/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=[N_TRAIN]*len(TRAIN_HP),
-                              aperture_size=1.0,
+                              aperture_size=1.0,  # radius
                               stop_mean_std_early=False,
                               in_dir=IN_DIR,
                               n_cores=200),
