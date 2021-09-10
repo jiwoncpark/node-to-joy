@@ -32,7 +32,7 @@ class BaseRaytracer(ABC):
         self.in_dir = in_dir
         self.out_dir = out_dir
         if not os.path.exists(self.out_dir):
-            os.mkdir(self.out_dir)
+            os.makedirs(self.out_dir, exist_ok=True)
         self.debug = debug
         # Paths for output data files
         self._define_paths()
