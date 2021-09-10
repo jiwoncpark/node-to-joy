@@ -250,9 +250,10 @@ class CosmoDC2GraphHealpix(BaseGraph):
         self.features = features
         self.n_cores = n_cores
         self.closeness = 0.5/60.0  # deg, edge criterion between neighbors
-        self.mag_lower = 18.5  # lower magnitude cut, excludes stars
-        # LSST gold sample i-band mag (Gorecki et al 2014)
-        self.mag_upper = 25.3  # upper magnitude cut, excludes small halos
+        self.mag_lower = -np.inf  # lower magnitude cut, excludes stars
+        # LSST gold sample i-band mag (Gorecki et al 2014) = 25.3
+        # LSST 10-year coadded 5-sigma depth = 26.8
+        self.mag_upper = 26.8  # upper magnitude cut, excludes small halos
         root = os.path.join(self.in_dir, 'cosmodc2_{:d}'.format(healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
