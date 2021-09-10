@@ -197,8 +197,8 @@ class CosmoDC2Raytracer(BaseRaytracer):
             if need_more:
                 padded_nside *= 2  # Increase resolution of target NSIDE
         # Slice pointings within padded bounds
-        ra_grid = ra_grid[inside_mask]
-        dec_grid = dec_grid[inside_mask]
+        ra_grid = ra_pre[inside_mask]
+        dec_grid = dec_pre[inside_mask]
         # Randomly choose number of sightlines requested
         rand_i = self.rng.choice(np.arange(len(ra_grid)),
                                  size=self.n_sightlines,

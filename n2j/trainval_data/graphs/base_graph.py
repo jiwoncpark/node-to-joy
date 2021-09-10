@@ -49,7 +49,7 @@ class BaseGraph(Dataset):
         raytracing_out_dir : str
             path to output directory of raytracer containing `Y.csv`
         aperture_size : float
-            field of view around each sightline in arcmin
+            Radius of field of view around each sightline in arcmin
         debug : bool
             debug mode. Default: False
 
