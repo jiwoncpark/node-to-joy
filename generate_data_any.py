@@ -1,9 +1,12 @@
 """Script to generate training data
 
 """
+import os
 import argparse
+from scipy import stats
 from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
+from n2j.config_utils import get_config
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -17,7 +20,7 @@ if __name__ == '__main__':
     CHECKPOINT_PATH = None
     SUB_TARGET = ['final_kappa', ]  # 'final_gamma1', 'final_gamma2']
     SUB_TARGET_LOCAL = ['redshift']
-    CHECKPOINT_DIR = 'results/E0'
+    CHECKPOINT_DIR = f'dummy/{args.healpix_id}'
 
     ##############
     # Labels (Y) #
@@ -68,12 +71,14 @@ if __name__ == '__main__':
     # sub_features += ['ellipticity_1_true', 'ellipticity_2_true']
     sub_features += ['mag_{:s}_lsst'.format(b) for b in 'ugrizY']
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
-
+    norm_obj = getattr(stats, 'norm')(loc=0.01, scale=0.04)
     trainer.load_dataset(dict(features=features,
                               raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=[N_TRAIN]*len(TRAIN_HP),
                               aperture_size=1.0,
+                              subsample_pdf_func=norm_obj.pdf,
+                              n_subsample=2000,
                               stop_mean_std_early=False,
                               in_dir=IN_DIR,
                               n_cores=200),
@@ -82,4 +87,9 @@ if __name__ == '__main__':
                          sub_target_local=SUB_TARGET_LOCAL,
                          is_train=True,
                          batch_size=BATCH_SIZE,
+                         num_workers=20,
+                         rebin=False,
+                         noise_kwargs=dict(mag=dict(override_kwargs=None,
+                                                    depth=5)),
+                         detection_kwargs={},
                          )
