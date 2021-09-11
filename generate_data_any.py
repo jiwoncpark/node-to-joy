@@ -81,6 +81,7 @@ if __name__ == '__main__':
                               n_subsample=2000,
                               stop_mean_std_early=False,
                               in_dir=IN_DIR,
+                              out_dir='/global/cscratch1/sd/jwp/n2j/data_v02',
                               n_cores=200),
                          sub_features=sub_features,
                          sub_target=SUB_TARGET,

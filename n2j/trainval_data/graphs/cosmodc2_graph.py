@@ -263,7 +263,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
             Directory from which to read input. Catalogs for this healpix
             should be placed in `in_dir/cosmodc2_{healpix}/raw`
         raytracing_out_dir : str
-            Directory containing the raytraced labels. They should be placed
+            Directory containing the raytraced labels, which should live
             in `raytracing_out_dir/Y_{healpix}`
         aperture_size : float
             Radius of aperture in arcmin
@@ -272,11 +272,11 @@ class CosmoDC2GraphHealpix(BaseGraph):
         features : list
             Input features per node
         n_cores : int, optional
-            Number of cores to parallelize across, only used when generating
+            Number of cores to parallelize across. Only used when generating
             the data.
         out_dir : str, optional
             Directory to store the generated graphs. Graphs will go to
-            `out_dir/processed`.
+            `out_dir/cosmodc2_{healpix}/processed`.
         debug : bool, optional
             Debug mode. Default: False
         """
@@ -295,7 +295,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         self.mag_upper = 26.8  # upper magnitude cut, excludes small halos
         # Store output in <root>/processed for processed_dir
         # Read input from in_dir/cosmodc2_{healpix}/raw
-        root = os.path.join(self.out_dir, 'cosmodc2_{:d}'.format(self.healpix))
+        root = osp.join(self.out_dir, f'cosmodc2_{self.healpix}')
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
 
@@ -327,7 +327,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
 
     @property
     def processed_file_path_fmt(self):
-        return os.path.join(self.processed_dir, self.processed_file_fmt)
+        return osp.join(self.processed_dir, self.processed_file_fmt)
 
     @property
     def processed_file_names(self):
@@ -451,7 +451,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         """Process a single sightline indexed i
 
         """
-        if not os.path.exists(self.processed_file_path_fmt.format(i)):
+        if not osp.exists(self.processed_file_path_fmt.format(i)):
             self._save_graph_to_disk(i)
         # else:
         #    self._save_graph_to_disk(i)
