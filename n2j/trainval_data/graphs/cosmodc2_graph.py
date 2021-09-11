@@ -245,7 +245,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
                  aperture_size, n_data, features,
                  n_cores=20,
                  debug=False,):
-        self.in_dir = in_dir if in_dir else '/global/cscratch1/sd/jwp/n2j/data'
+        self.in_dir = in_dir
         self.healpix = healpix
         self.features = features
         self.n_cores = n_cores
