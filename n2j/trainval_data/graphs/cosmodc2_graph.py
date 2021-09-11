@@ -3,6 +3,7 @@
 """
 
 import os
+import os.path as osp
 import multiprocessing
 from functools import cached_property
 import bisect
@@ -28,7 +29,8 @@ class CosmoDC2Graph(ConcatDataset):
     def __init__(self, in_dir, healpixes, raytracing_out_dirs, aperture_size,
                  n_data, features, subsample_pdf_func=None,
                  n_subsample=None, subsample_with_replacement=True,
-                 stop_mean_std_early=False, n_cores=20, num_workers=4):
+                 stop_mean_std_early=False, n_cores=20, num_workers=4,
+                 out_dir=None):
         """Summary
 
         Parameters
@@ -60,6 +62,10 @@ class CosmoDC2Graph(ConcatDataset):
         self.n_cores = n_cores
         self.num_workers = num_workers
         self.subsample_pdf_func = subsample_pdf_func
+        if out_dir is None:
+            out_dir = in_dir
+        else:
+            out_dir = out_dir
         if self.subsample_pdf_func is not None:
             assert n_subsample is not None
         self.n_subsample = n_subsample
@@ -74,6 +80,7 @@ class CosmoDC2Graph(ConcatDataset):
                                             n_data[i],
                                             features,
                                             n_cores=self.n_cores,
+                                            out_dir=out_dir
                                             )
             datasets.append(graph_hp)
             Y_list.append(graph_hp.Y)
@@ -244,8 +251,40 @@ class CosmoDC2GraphHealpix(BaseGraph):
     def __init__(self, healpix, in_dir, raytracing_out_dir,
                  aperture_size, n_data, features,
                  n_cores=20,
+                 out_dir=None,
                  debug=False,):
+        """Graph dataset for a single healpix
+
+        Parameters
+        ----------
+        healpix : int
+            Healpix ID of NSIDE=32 from CosmoDC2
+        in_dir : str
+            Directory from which to read input. Catalogs for this healpix
+            should be placed in `in_dir/cosmodc2_{healpix}/raw`
+        raytracing_out_dir : str
+            Directory containing the raytraced labels. They should be placed
+            in `raytracing_out_dir/Y_{healpix}`
+        aperture_size : float
+            Radius of aperture in arcmin
+        n_data : int
+            Number of sightlines
+        features : list
+            Input features per node
+        n_cores : int, optional
+            Number of cores to parallelize across, only used when generating
+            the data.
+        out_dir : str, optional
+            Directory to store the generated graphs. Graphs will go to
+            `out_dir/processed`.
+        debug : bool, optional
+            Debug mode. Default: False
+        """
         self.in_dir = in_dir
+        if out_dir is None:
+            self.out_dir = in_dir
+        else:
+            self.out_dir = out_dir
         self.healpix = healpix
         self.features = features
         self.n_cores = n_cores
@@ -254,13 +293,19 @@ class CosmoDC2GraphHealpix(BaseGraph):
         # LSST gold sample i-band mag (Gorecki et al 2014) = 25.3
         # LSST 10-year coadded 5-sigma depth = 26.8
         self.mag_upper = 26.8  # upper magnitude cut, excludes small halos
-        root = os.path.join(self.in_dir, 'cosmodc2_{:d}'.format(healpix))
+        # Store output in <root>/processed for processed_dir
+        # Read input from in_dir/cosmodc2_{healpix}/raw
+        root = os.path.join(self.out_dir, 'cosmodc2_{:d}'.format(self.healpix))
         BaseGraph.__init__(self, root, raytracing_out_dir, aperture_size,
                            n_data, debug)
 
     @property
     def n_features(self):
         return len(self.features)
+
+    @property
+    def raw_dir(self) -> str:
+        return osp.join(self.in_dir, f'cosmodc2_{self.healpix}', 'raw')
 
     @property
     def raw_file_name(self):
