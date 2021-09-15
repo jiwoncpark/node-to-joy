@@ -50,6 +50,7 @@ class InferenceManager:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.out_dir = out_dir
         os.makedirs(self.out_dir, exist_ok=True)
+        self._exclude_los = False  # do not exclude sightlines from inference
 
     def seed_everything(self):
         """Seed the training and sampling for reproducibility
@@ -237,6 +238,15 @@ class InferenceManager:
         print("Epoch [{}]: TRAIN Loss: {:.4f}".format(self.epoch, train_loss))
         print("Epoch [{}]: VALID Loss: {:.4f}".format(self.epoch, val_loss))
         self.last_saved_val_loss = val_loss
+
+    @property
+    def exclude_los(self):
+        return self._exclude_los
+
+    @exclude_los.setter
+    def exclude_los(self, value):
+        self._exclude_los = value
+        print("Now excluding: ", value)
 
     def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20, flatten=True):
         """Get the samples from the BNN
