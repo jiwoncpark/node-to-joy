@@ -66,6 +66,7 @@ def run_mcmc(log_prob, log_prob_kwargs, p0, n_run, n_burn, chain_path,
                                         kwargs=log_prob_kwargs,
                                         pool=pool, backend=backend)
         if n_burn > 0:
+            print("Running MCMC...")
             state = sampler.run_mcmc(p0, n_burn)
             sampler.reset()
             sampler.run_mcmc(state, n_run, progress=True)
