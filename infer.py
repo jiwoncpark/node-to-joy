@@ -12,6 +12,7 @@ if __name__ == '__main__':
     cfg = get_config()
     infer_obj = InferenceManager(checkpoint_dir=cfg['trainer']['checkpoint_dir'],
                                  **cfg['inference_manager'])
+    infer_obj.delete_previous()
     # Load training stats (for normalizing data)
     norm_obj = getattr(stats, cfg['data']['train_dist_name'])(**cfg['data']['train_dist_kwargs'])
     train_raytracing = [os.path.join(cfg['data']['in_dir'],
@@ -56,6 +57,7 @@ if __name__ == '__main__':
                            noise_kwargs=cfg['data']['noise_kwargs'],
                            detection_kwargs=cfg['data'].get('detection_kwargs', {}),
                            )
+    infer_obj.include_los = cfg['test_data'].get('idx', None)
     # Define model
     model_kwargs = dict(
                         dim_in=len(cfg['data']['sub_features']),
