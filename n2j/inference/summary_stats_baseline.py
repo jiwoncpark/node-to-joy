@@ -133,7 +133,7 @@ class Matcher:
         os.makedirs(self.out_dir, exist_ok=True)
         self.overview_path = osp.join(self.out_dir, 'overview.csv')
 
-    def match_summary_stats(self, thresholds):
+    def match_summary_stats(self, thresholds, interim_pdf_func=None):
         """Match summary stats between train and test
 
         Parameters
@@ -141,6 +141,8 @@ class Matcher:
         thresholds : dict
             Matching thresholds for summary stats
             Keys should be one or both of 'N' and 'N_inv_dist'.
+        interim_pdf_func : callable, optional
+            Interim prior PDF with which to reweight the samples
 
         """
         ss_names = list(thresholds.keys())
@@ -154,10 +156,13 @@ class Matcher:
                                          'minus_1sig',
                                          'logp'
                                          'mad',
-                                         'mae'])
+                                         'mae',
+                                         'is_optimal'])
         for i in tqdm(range(n_test), desc="matching"):
             for s in ss_names:
                 test_x = self.test_stats.stats[s][i]
+                optimal_crit = np.empty(len(thresholds))
+                rows_for_s = []
                 for t in thresholds[s]:
                     # TODO: do this in chunks
                     accepted, _ = match(self.train_stats.stats[s],
@@ -168,11 +173,13 @@ class Matcher:
                                      f'matched_k_los_{i}_ss_{s}_{t:.1f}.npy'),
                             accepted)
                     # Add descriptive stats to overview table
+                    n_matches = len(accepted)
                     row = dict(los_i=i,
                                summary_stats_name=s,
                                threshold=t,
                                test_x=test_x,
-                               n_matches=len(accepted))
+                               n_matches=n_matches)
+                    optimal_crit[t] = n_matches
                     if len(accepted) > 0:
                         lower, med, upper = np.quantile(accepted,
                                                         [0.5-0.34, 0.5, 0.5+0.34])
@@ -190,7 +197,19 @@ class Matcher:
                                        mae=np.median(np.abs(accepted - true_k)),
                                        true_k=true_k
                                        )
-                    overview = overview.append(row, ignore_index=True)
+                    # Each ss name and threshold combo gets a row
+                    # Wait until all thresholds are collected to append
+                    rows_for_s.append(row)
+                # Determine optimal threshold
+                is_optimal = get_optimal_threshold(thresholds,
+                                                   optimal_crit,
+                                                   min_matches=1000)
+                # Record whether each row was "optimal"
+                # There's only one optimal row for a given ss_name
+                for i, r in enumerate(rows_for_s):
+                    r.update(is_optimal=is_optimal[i])
+                overview = overview.append(rows_for_s, ignore_index=True)
+
         overview.to_csv(self.overview_path, index=False)
 
     def get_overview_table(self):
@@ -199,6 +218,25 @@ class Matcher:
         else:
             overview = pd.read_csv(self.overview_path, index_col=None)
         return overview
+
+
+def get_optimal_threshold(thresholds, n_matches, min_matches=1000):
+    """Get the smallest threshold that has some minimum number of matches
+
+    Parameters
+    ----------
+    thresholds : array-like
+    n_matches : array-like
+    min_matches : int
+    """
+    is_optimal = np.zeros(len(thresholds)).astype(bool)  # init all False
+    thresholds = np.array(thresholds).astype(float)
+    n_matches = np.array(n_matches)
+    # Impossible for thresholds with n_matches < min_matches to be selected
+    thresholds[n_matches < min_matches] = np.nan  # hacky
+    i = np.nanargmin(thresholds)
+    is_optimal[i] = True
+    return is_optimal
 
 
 def match(train_x, test_x, train_y, threshold):
