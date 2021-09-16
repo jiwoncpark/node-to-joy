@@ -50,7 +50,7 @@ class InferenceManager:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.out_dir = out_dir
         os.makedirs(self.out_dir, exist_ok=True)
-        self._exclude_los = False  # do not exclude sightlines from inference
+        self._include_los = slice(None)  # do not exclude los from inference
 
     def seed_everything(self):
         """Seed the training and sampling for reproducibility
@@ -147,9 +147,9 @@ class InferenceManager:
                 self.train_dataset = train_subset
                 self.train_loader = DataLoader(self.train_dataset,
                                                batch_size=batch_size,
-                                               shuffle=True,
+                                               shuffle=False,  # no need here
                                                num_workers=self.num_workers,
-                                               drop_last=False)
+                                               drop_last=True)
             else:
                 # Loading option 2: Over/undersample according to inverse frequency
                 if rebin:
@@ -166,7 +166,7 @@ class InferenceManager:
                     self.class_weight = None
                     self.train_loader = DataLoader(self.train_dataset,
                                                    batch_size=batch_size,
-                                                   shuffle=True,
+                                                   shuffle=False,  # no need here
                                                    num_workers=self.num_workers,
                                                    drop_last=True)
             print(f"Train dataset size: {len(self.train_dataset)}")
@@ -187,26 +187,30 @@ class InferenceManager:
                     torch.save(stats_test, stats_test_path)
             self.test_dataset.transform_X_Y_local = self.transform_X_Y_local
             self.test_dataset.transform_Y = self.transform_Y
-            # Val/test loading option 1: Subsample from a distribution
-            if data_kwargs['subsample_pdf_func'] is not None:
-                self.class_weight = None
-                test_subset = torch.utils.data.Subset(self.test_dataset,
-                                                      stats_test['subsample_idx'])
-                self.test_dataset = test_subset
-                self.test_loader = DataLoader(self.test_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=False,
-                                              num_workers=self.num_workers,
-                                              drop_last=False)
-            else:
-                # Val/test loading option 2: No special sampling, no shuffle
-                self.class_weight = None
-                self.test_loader = DataLoader(self.test_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=False,
-                                              num_workers=self.num_workers,
-                                              drop_last=True)
+            self.set_valtest_loading(stats_test['subsample_idx'])
             print(f"Test dataset size: {len(self.test_dataset)}")
+
+    def set_valtest_loading(self, sub_idx):
+        """Set the loading options for val/test set. Should be called
+        whenever there are changes to the test dataset, to update the
+        dataloader.
+
+        Parameters
+        ----------
+        subsample_pdf_func : callable
+            Description
+        sub_idx : TYPE
+            Description
+        """
+        self.class_weight = None
+        test_subset = torch.utils.data.Subset(self.test_dataset,
+                                              sub_idx)
+        self.test_dataset = test_subset
+        self.test_loader = DataLoader(self.test_dataset,
+                                      batch_size=self.val_batch_size,
+                                      shuffle=False,
+                                      num_workers=self.num_workers,
+                                      drop_last=False)
 
     def configure_model(self, model_name, model_kwargs={}):
         self.model_name = model_name
@@ -240,13 +244,34 @@ class InferenceManager:
         self.last_saved_val_loss = val_loss
 
     @property
-    def exclude_los(self):
-        return self._exclude_los
+    def include_los(self):
+        """Indices to include in inference. Useful when there are faulty
+        examples in the test set you want to exclude.
 
-    @exclude_los.setter
-    def exclude_los(self, value):
-        self._exclude_los = value
-        print("Now excluding: ", value)
+        """
+        return self._include_los
+
+    @include_los.setter
+    def include_los(self, value):
+        if value is None:
+            # Do nothing
+            return
+        value = list(value)
+        self._include_los = value
+        self.set_valtest_loading(value)
+        max_guess = max(value)
+        excluded = np.arange(max_guess)[~np.isin(np.arange(max_guess),
+                                                 value)]
+        print(f"Assuming previously {max_guess+1} elements, "
+              f" now excluding: {excluded}")
+
+    @property
+    def n_test(self):
+        return len(self.include_los)
+
+    @property
+    def bnn_kappa_path(self):
+        return osp.join(self.out_dir, 'k_bnn.npy')
 
     def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20, flatten=True):
         """Get the samples from the BNN
@@ -263,19 +288,17 @@ class InferenceManager:
         np.array of shape `[n_test, self.Y_dim, n_samples*n_mc_dropout]`
 
         """
-        n_test = len(self.test_dataset)
-        path = osp.join(self.out_dir, 'k_bnn.npy')
-        if osp.exists(path):
-            samples = np.load(path)
+        if osp.exists(self.bnn_kappa_path):
+            samples = np.load(self.bnn_kappa_path)
             if flatten:
-                samples = samples.reshape([n_test, self.Y_dim, -1])
+                samples = samples.reshape([self.n_test, self.Y_dim, -1])
             return samples
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
         self.model.eval()
         with torch.no_grad():
-            samples = np.empty([n_test, n_mc_dropout, n_samples, self.Y_dim])
+            samples = np.empty([self.n_test, n_mc_dropout, n_samples, self.Y_dim])
             for i, batch in enumerate(self.test_loader):
                 batch = batch.to(self.device)
                 for mc_iter in range(n_mc_dropout):
@@ -289,12 +312,52 @@ class InferenceManager:
                     samples[i*B: (i+1)*B, mc_iter, :, :] = mc_samples
         # Transpose dims to get [n_test, Y_dim, n_mc_dropout, n_samples]
         samples = samples.transpose(0, 3, 1, 2)
-        np.save(path, samples)
+        np.save(self.bnn_kappa_path, samples)
         if flatten:
-            samples = samples.reshape([n_test, self.Y_dim, -1])
+            samples = samples.reshape([self.n_test, self.Y_dim, -1])
         return samples
 
-    def get_true_kappa(self, is_train, add_suffix='',
+    @property
+    def true_train_kappa_path(self):
+        return osp.join(self.out_dir, 'k_train.npy')
+
+    @property
+    def train_summary_stats_path(self):
+        return osp.join(self.out_dir, 'summary_stats_train.npy')
+
+    @property
+    def true_test_kappa_path(self):
+        return osp.join(self.out_dir, 'k_test.npy')
+
+    @property
+    def test_summary_stats_path(self):
+        return osp.join(self.out_dir, 'summary_stats_test.npy')
+
+    @property
+    def matching_dir(self):
+        return osp.join(self.out_dir, 'matching')
+
+    @property
+    def log_p_k_given_omega_int_path(self):
+        return osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
+
+    def delete_previous(self):
+        """Delete previously stored files related to the test set and
+        inference results, while leaving any training-set related caches,
+        which take longer to generate.
+        """
+        import shutil
+        files = [self.true_test_kappa_path, self.test_summary_stats_path]
+        files += [self.bnn_kappa_path, self.log_p_k_given_omega_int_path]
+        for f in files:
+            if osp.exists(f):
+                print(f"Deleting {f}...")
+                os.remove(f)
+        if osp.exists(self.matching_dir):
+            print(f"Deleting {f} and all its contents...")
+            shutil.rmtree(self.matching_dir)
+
+    def get_true_kappa(self, is_train,
                        compute_summary=True, save=True):
         """Fetch true kappa (for train/val/test)
 
@@ -302,9 +365,6 @@ class InferenceManager:
         ----------
         is_train : bool
             Whether to get true kappas for train (test otherwise)
-        add_suffix : str, optional
-            Suffix to append to the filename. Useful in case there are
-            variations in the test distribution
         compute_summary : bool, optional
             Whether to compute summary stats in the loop
         save : bool, optional
@@ -318,20 +378,19 @@ class InferenceManager:
         # Decide which dataset we're collecting kappa labels for
         if is_train:
             loader = self.train_loader
-            suffix = 'train'
+            path = self.true_train_kappa_path
             n_data = len(self.train_dataset)
+            ss_path = self.train_summary_stats_path
         else:
             loader = self.test_loader
-            suffix = 'test'
-            n_data = len(self.test_dataset)
-        path = osp.join(self.out_dir, f'k_{suffix}{add_suffix}.npy')
-        ss_path = osp.join(self.out_dir,
-                           f'summary_stats_{suffix}.npy')
+            path = self.true_test_kappa_path
+            n_data = self.n_test
+            ss_path = self.test_summary_stats_path
         if osp.exists(path):
             if compute_summary and osp.exists(ss_path):
                 true_kappa = np.load(path)
                 return true_kappa
-        print(f"Saving 'k_{suffix}{add_suffix}.npy'...")
+        print(f"Saving {path}...")
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
         Y_std = self.Y_std.to(self.device)
@@ -374,15 +433,13 @@ class InferenceManager:
                               ['ra_true', 'dec_true'])
         train_ss_obj = ssb.SummaryStats(len(self.train_dataset),
                                         pos_indices)
-        train_ss_obj.set_stats(osp.join(self.out_dir,
-                               'summary_stats_train.npy'))
+        train_ss_obj.set_stats(self.train_summary_stats_path)
         test_ss_obj = ssb.SummaryStats(len(self.test_dataset),
                                        pos_indices)
-        test_ss_obj.set_stats(osp.join(self.out_dir,
-                              'summary_stats_test.npy'))
+        test_ss_obj.set_stats(self.test_summary_stats_path)
         matcher = ssb.Matcher(train_ss_obj, test_ss_obj,
                               train_k,
-                              osp.join(self.out_dir, 'matching'),
+                              self.matching_dir,
                               test_k)
         matcher.match_summary_stats(thresholds)
         overview = matcher.get_overview_table()
@@ -407,16 +464,15 @@ class InferenceManager:
             Probabilities log(p_k|Omega_int) of
             shape `[n_test, n_mc_dropout*n_samples]`
         """
-        path = osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
-        if osp.exists(path):
-            return np.load(path)
+        if osp.exists(self.log_p_k_given_omega_int_path):
+            return np.load(self.log_p_k_given_omega_int_path)
         k_train = self.get_true_kappa(is_train=True).squeeze(1)
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout).squeeze(1)
         log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=k_train,
                                                                               k_bnn=k_bnn,
                                                                               interim_pdf_func=interim_pdf_func)
-        np.save(path, log_p_k_given_omega_int)
+        np.save(self.log_p_k_given_omega_int_path, log_p_k_given_omega_int)
         return log_p_k_given_omega_int
 
     def run_mcmc_for_omega_post(self, n_samples, n_mc_dropout,
