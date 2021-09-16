@@ -523,8 +523,8 @@ class InferenceManager:
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
 
-    def get_kappa_log_weights(self, idx, n_samples, n_mc_dropout,
-                              interim_pdf_func):
+    def get_kappa_log_weights(self, idx, n_samples=None, n_mc_dropout=None,
+                              interim_pdf_func=None, grid=None):
         """Get log weights for reweighted kappa posterior per sample
 
         Parameters
@@ -541,6 +541,8 @@ class InferenceManager:
             kappa samples were already drawn and stored)
         interim_pdf_func : callable
             Function that returns the density of the interim prior
+        grid : None, optional
+            Unused but kept for consistency with `get_kappa_log_weigths_grid`
 
         Returns
         -------
@@ -619,7 +621,9 @@ class InferenceManager:
                                       scale=samples_d.std())
             bnn_prob_d = norm_d.pdf(grid)
             numer += (bnn_prob_d - numer)/(d+1)  # running mean
-        np.save(osp.join(self.out_dir, f'grid_bnn_gmm_{idx}.npy'),
+        # Useful for debugging
+        np.save(osp.join(self.reweighted_grid_dir,
+                         f'grid_bnn_gmm_{idx}.npy'),
                 numer)
         denom = interim_pdf_func(grid)
         log_weights = np.log(numer/denom)
@@ -629,24 +633,52 @@ class InferenceManager:
 
     def get_reweighted_bnn_kappa(self, n_resamples, grid_kappa_kwargs,
                                  ):
+        """Get the reweighted BNN kappa samples, reweighted either on a
+        grid or per sample
+
+        Parameters
+        ----------
+        n_resamples : int
+            Number of resamples from the reweighted distribution
+        grid_kappa_kwargs : dict
+            Kwargs for
+
+        Returns
+        -------
+        TYPE
+            Description
+        """
         if osp.exists(self.reweighted_bnn_kappa_grid_path):
             print("Reading existing reweighted BNN kappa...")
             return np.load(self.reweighted_bnn_kappa_grid_path)
         n_test = len(self.test_dataset)
-        k_reweighted = np.empty([n_test, 1, n_resamples])
+        k_bnn = self.get_bnn_kappa(n_samples=grid_kappa_kwargs['n_samples'],
+                                   n_mc_dropout=grid_kappa_kwargs['n_mc_dropout'])
+        # Init reweighted arrays
+        k_reweighted_grid = np.empty([n_test, 1, n_resamples])
+        k_reweighted_per_sample = np.empty([n_test, 1, n_resamples])
         for idx in tqdm(range(n_test), desc='evaluating, resampling'):
             # On a grid
             grid, log_p = self.get_kappa_log_weights_grid(idx,
                                                           **grid_kappa_kwargs)
-            resamples = iutils.resample_from_pdf(grid, log_p, n_resamples)
-            k_reweighted[idx, 0, :] = resamples
+            per_grid = iutils.resample_from_pdf(grid, log_p, n_resamples)
+            k_reweighted_grid[idx, 0, :] = per_grid
             # Per sample
             log_p_sample = self.get_kappa_log_weights(idx, **grid_kappa_kwargs)
+            plot_path = osp.join(self.reweighted_per_sample_dir, f'kde_{idx}.png')
+            per_sample = iutils.resample_from_samples(k_bnn[idx],
+                                                      np.exp(log_p_sample),
+                                                      n_resamples,
+                                                      plot_path)
+            k_reweighted_per_sample[idx, 0, :] = per_sample
         # Grid resamples for all sightlines
-        np.save(self.reweighted_bnn_kappa_grid_path, k_reweighted)
+        np.save(self.reweighted_bnn_kappa_grid_path,
+                k_reweighted_grid)
         # Per-sample resamples for all sightlines
+        np.save(self.reweighted_bnn_kappa_per_sample_path,
+                k_reweighted_per_sample)
 
-        return k_reweighted
+        return k_reweighted_grid
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
                              corner_kwargs, log_idx=None):
@@ -747,7 +779,7 @@ class InferenceManager:
             post_samples = k_bnn_post[i, 0, :]
             # Evaluate log p at truth
             true_k = k_test[i]
-            pre_log_p = np.log(np.load(osp.join(self.out_dir,
+            pre_log_p = np.log(np.load(osp.join(self.reweighted_grid_dir,
                                                 f'grid_bnn_gmm_{i}.npy')))
             grid, post_log_p = self.get_kappa_log_weights_grid(i)
             # Make finer resolution

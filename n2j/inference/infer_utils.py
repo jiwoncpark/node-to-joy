@@ -317,3 +317,32 @@ def resample_from_pdf(grid, log_pdf, n_samples):
                                  replace=True,
                                  p=pdf)
     return resampled
+
+
+def resample_from_samples(samples, weights, n_resamples, plot_path=None):
+    """Resample from a distribution defined by weighted samples
+
+    Parameters
+    ----------
+    samples : np.ndarray
+    weights : np.ndarray
+    n_resamples : int
+    plot_path : str
+        Path for the plot illustrating the KDE fit
+    """
+    samples = samples.squeeze()
+    weights = weights.squeeze()
+    kde = stats.gaussian_kde(samples, bw_method='scott', weights=weights)
+    resamples = kde.resample(n_resamples)
+    if plot_path is not None:
+        grid = np.linspace(-0.2, 0.2, 50)
+        plt.hist(samples, density=True,
+                 histtype='step', color='tab:gray', label='orig samples')
+        plt.hist(samples, weights=weights, density=True,
+                 alpha=0.5, color='tab:red', label='weighted samples')
+        plt.plot(grid, kde.pdf(grid), color='k', label='KDE fit')
+        plt.legend()
+        plt.savefig(plot_path)
+        plt.close()
+    return resamples
+
