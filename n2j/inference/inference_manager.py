@@ -273,10 +273,6 @@ class InferenceManager:
     def bnn_kappa_path(self):
         return osp.join(self.out_dir, 'k_bnn.npy')
 
-    @property
-    def reweighted_bnn_kappa_path(self):
-        return osp.join(self.out_dir, 'k_bnn_reweighted.npy')
-
     def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20, flatten=True):
         """Get the samples from the BNN
 
@@ -342,6 +338,10 @@ class InferenceManager:
         return osp.join(self.out_dir, 'matching')
 
     @property
+    def log_p_k_given_omega_int_path(self):
+        return osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
+
+    @property
     def reweighted_grid_dir(self):
         return osp.join(self.out_dir, 'reweighted_grid')
 
@@ -350,8 +350,14 @@ class InferenceManager:
         return osp.join(self.out_dir, 'reweighted_per_sample')
 
     @property
-    def log_p_k_given_omega_int_path(self):
-        return osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
+    def reweighted_bnn_kappa_grid_path(self):
+        return osp.join(self.reweighted_grid_dir,
+                        'k_bnn_reweighted_grid.npy')
+
+    @property
+    def reweighted_bnn_kappa_per_sample_path(self):
+        return osp.join(self.reweighted_per_sample_dir,
+                        'k_bnn_reweighted_per_sample.npy')
 
     def delete_previous(self):
         """Delete previously stored files related to the test set and
@@ -361,7 +367,7 @@ class InferenceManager:
         import shutil
         files = [self.true_test_kappa_path, self.test_summary_stats_path]
         files += [self.bnn_kappa_path, self.log_p_k_given_omega_int_path]
-        files += [self.reweighted_bnn_kappa_path]
+        files += [self.reweighted_bnn_kappa_grid_path]
         for f in files:
             if osp.exists(f):
                 print(f"Deleting {f}...")
@@ -541,7 +547,7 @@ class InferenceManager:
         np.ndarray
             log weights for each of the BNN samples for this sightline
         """
-        osp.makedirs(self.reweighted_per_sample_dir, exist_ok=True)
+        os.makedirs(self.reweighted_per_sample_dir, exist_ok=True)
         path = osp.join(self.reweighted_per_sample_dir,
                         f'log_weights_{idx}.npy')
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
@@ -594,7 +600,7 @@ class InferenceManager:
             kappa grid, log weights for each of the BNN samples for
             this sightline
         """
-        osp.makedirs(self.reweighted_grid_dir, exist_ok=True)
+        os.makedirs(self.reweighted_grid_dir, exist_ok=True)
         path = osp.join(self.reweighted_grid_dir,
                         f'log_weights_{idx}.npy')
         if osp.exists(path):
@@ -623,17 +629,23 @@ class InferenceManager:
 
     def get_reweighted_bnn_kappa(self, n_resamples, grid_kappa_kwargs,
                                  ):
-        if osp.exists(self.reweighted_bnn_kappa_path):
+        if osp.exists(self.reweighted_bnn_kappa_grid_path):
             print("Reading existing reweighted BNN kappa...")
-            return np.load(self.reweighted_bnn_kappa_path)
+            return np.load(self.reweighted_bnn_kappa_grid_path)
         n_test = len(self.test_dataset)
         k_reweighted = np.empty([n_test, 1, n_resamples])
-        for idx in tqdm(range(n_test), desc='evaluating, resampling on grid'):
+        for idx in tqdm(range(n_test), desc='evaluating, resampling'):
+            # On a grid
             grid, log_p = self.get_kappa_log_weights_grid(idx,
                                                           **grid_kappa_kwargs)
             resamples = iutils.resample_from_pdf(grid, log_p, n_resamples)
             k_reweighted[idx, 0, :] = resamples
-        np.save(self.reweighted_bnn_kappa_path, k_reweighted)
+            # Per sample
+            log_p_sample = self.get_kappa_log_weights(idx, **grid_kappa_kwargs)
+        # Grid resamples for all sightlines
+        np.save(self.reweighted_bnn_kappa_grid_path, k_reweighted)
+        # Per-sample resamples for all sightlines
+
         return k_reweighted
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
