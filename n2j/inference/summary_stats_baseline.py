@@ -162,9 +162,9 @@ class Matcher:
         for i in tqdm(range(n_test), desc="matching"):
             for s in ss_names:
                 test_x = self.test_stats.stats[s][i]
-                optimal_crit = np.empty(len(thresholds))
+                optimal_crit = np.empty(len(thresholds[s]))
                 rows_for_s = []
-                for t in thresholds[s]:
+                for t_idx, t in enumerate(thresholds[s]):
                     # TODO: do this in chunks
                     accepted, _ = match(self.train_stats.stats[s],
                                         test_x,
@@ -180,7 +180,7 @@ class Matcher:
                                threshold=t,
                                test_x=test_x,
                                n_matches=n_matches)
-                    optimal_crit[t] = n_matches
+                    optimal_crit[t_idx] = n_matches
                     if len(accepted) > 0:
                         if interim_pdf_func is not None:
                             inv_prior = 1.0/interim_pdf_func(accepted)
@@ -210,7 +210,7 @@ class Matcher:
                     # Wait until all thresholds are collected to append
                     rows_for_s.append(row)
                 # Determine optimal threshold
-                is_optimal = get_optimal_threshold(thresholds,
+                is_optimal = get_optimal_threshold(thresholds[s],
                                                    optimal_crit,
                                                    min_matches=1000)
                 # Record whether each row was "optimal"
