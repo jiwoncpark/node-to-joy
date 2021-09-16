@@ -267,7 +267,7 @@ class InferenceManager:
 
     @property
     def n_test(self):
-        return len(self.include_los)
+        return len(self.test_dataset)
 
     @property
     def bnn_kappa_path(self):
