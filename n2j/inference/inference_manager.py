@@ -459,12 +459,12 @@ class InferenceManager:
         test_ss_obj = ssb.SummaryStats(len(self.test_dataset),
                                        pos_indices)
         test_ss_obj.set_stats(self.test_summary_stats_path)
-        matcher = ssb.Matcher(train_ss_obj, test_ss_obj,
-                              train_k,
-                              self.matching_dir,
-                              test_k)
-        matcher.match_summary_stats(thresholds)
-        overview = matcher.get_overview_table()
+        self.matcher = ssb.Matcher(train_ss_obj, test_ss_obj,
+                                   train_k,
+                                   self.matching_dir,
+                                   test_k)
+        self.matcher.match_summary_stats(thresholds)
+        overview = self.matcher.get_overview_table()
         return overview
 
     def get_log_p_k_given_omega_int(self, n_samples, n_mc_dropout,
