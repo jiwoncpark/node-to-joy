@@ -262,8 +262,8 @@ class InferenceManager:
         max_guess = max(value)
         excluded = np.arange(max_guess)[~np.isin(np.arange(max_guess),
                                                  value)]
-        print(f"Assuming previously {max_guess+1} elements, "
-              f" now excluding: {excluded}")
+        print(f"Assuming there were {max_guess+1} sightlines in test set, "
+              f" now excluding indices: {excluded}")
 
     @property
     def n_test(self):
@@ -272,6 +272,10 @@ class InferenceManager:
     @property
     def bnn_kappa_path(self):
         return osp.join(self.out_dir, 'k_bnn.npy')
+
+    @property
+    def reweighted_bnn_kappa_path(self):
+        return osp.join(self.out_dir, 'k_bnn_reweighted.npy')
 
     def get_bnn_kappa(self, n_samples=50, n_mc_dropout=20, flatten=True):
         """Get the samples from the BNN
@@ -338,6 +342,14 @@ class InferenceManager:
         return osp.join(self.out_dir, 'matching')
 
     @property
+    def reweighted_grid_dir(self):
+        return osp.join(self.out_dir, 'reweighted_grid')
+
+    @property
+    def reweighted_per_sample_dir(self):
+        return osp.join(self.out_dir, 'reweighted_per_sample')
+
+    @property
     def log_p_k_given_omega_int_path(self):
         return osp.join(self.out_dir, 'log_p_k_given_omega_int.npy')
 
@@ -349,13 +361,17 @@ class InferenceManager:
         import shutil
         files = [self.true_test_kappa_path, self.test_summary_stats_path]
         files += [self.bnn_kappa_path, self.log_p_k_given_omega_int_path]
+        files += [self.reweighted_bnn_kappa_path]
         for f in files:
             if osp.exists(f):
                 print(f"Deleting {f}...")
                 os.remove(f)
-        if osp.exists(self.matching_dir):
-            print(f"Deleting {f} and all its contents...")
-            shutil.rmtree(self.matching_dir)
+        dirs = [self.matching_dir]
+        dirs += [self.reweighted_grid_dir, self.reweighted_per_sample_dir]
+        for d in dirs:
+            if osp.exists(d):
+                print(f"Deleting {d} and all its contents...")
+                shutil.rmtree(d)
 
     def get_true_kappa(self, is_train,
                        compute_summary=True, save=True):
@@ -503,7 +519,7 @@ class InferenceManager:
 
     def get_kappa_log_weights(self, idx, n_samples, n_mc_dropout,
                               interim_pdf_func):
-        """Get log weights for reweighted kappa posterior
+        """Get log weights for reweighted kappa posterior per sample
 
         Parameters
         ----------
@@ -525,7 +541,9 @@ class InferenceManager:
         np.ndarray
             log weights for each of the BNN samples for this sightline
         """
-        path = osp.join(self.out_dir, f'log_weights_{idx}.npy')
+        osp.makedirs(self.reweighted_per_sample_dir, exist_ok=True)
+        path = osp.join(self.reweighted_per_sample_dir,
+                        f'log_weights_{idx}.npy')
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout)
         log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
@@ -576,7 +594,9 @@ class InferenceManager:
             kappa grid, log weights for each of the BNN samples for
             this sightline
         """
-        path = osp.join(self.out_dir, f'grid_log_weights_{idx}.npy')
+        osp.makedirs(self.reweighted_grid_dir, exist_ok=True)
+        path = osp.join(self.reweighted_grid_dir,
+                        f'log_weights_{idx}.npy')
         if osp.exists(path):
             return np.load(path)
         # Get unflattened, i.e. [n_test, 1, n_mc_dropout, n_samples]
@@ -603,10 +623,9 @@ class InferenceManager:
 
     def get_reweighted_bnn_kappa(self, n_resamples, grid_kappa_kwargs,
                                  ):
-        path = osp.join(self.out_dir, 'k_bnn_reweighted.npy')
-        if osp.exists(path):
-            print("Reading existing `k_bnn_reweighted.npy`...")
-            return np.load(path)
+        if osp.exists(self.reweighted_bnn_kappa_path):
+            print("Reading existing reweighted BNN kappa...")
+            return np.load(self.reweighted_bnn_kappa_path)
         n_test = len(self.test_dataset)
         k_reweighted = np.empty([n_test, 1, n_resamples])
         for idx in tqdm(range(n_test), desc='evaluating, resampling on grid'):
@@ -614,7 +633,7 @@ class InferenceManager:
                                                           **grid_kappa_kwargs)
             resamples = iutils.resample_from_pdf(grid, log_p, n_resamples)
             k_reweighted[idx, 0, :] = resamples
-        np.save(path, k_reweighted)
+        np.save(self.reweighted_bnn_kappa_path, k_reweighted)
         return k_reweighted
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
@@ -674,13 +693,21 @@ class InferenceManager:
         ax.legend()
 
     @property
+    def pre_reweighting_metrics_path(self):
+        return osp.join(self.out_dir, 'pre_metrics.csv')
+
+    @property
     def pre_reweighting_metrics(self):
-        return pd.read_csv(osp.join(self.out_dir, 'pre_metrics.csv'),
+        return pd.read_csv(self.pre_reweighting_metrics_path,
                            index_col=False)
 
     @property
+    def post_reweighting_metrics_path(self):
+        return osp.join(self.out_dir, 'post_metrics.csv')
+
+    @property
     def post_reweighting_metrics(self):
-        return pd.read_csv(osp.join(self.out_dir, 'post_metrics.csv'),
+        return pd.read_csv(self.post_reweighting_metrics_path,
                            index_col=False)
 
     def compute_metrics(self):
@@ -748,9 +775,9 @@ class InferenceManager:
         post_metrics = post_metrics.append(post_metrics.median(),
                                            ignore_index=True)
         # Save as CSV
-        pre_metrics.to_csv(osp.join(self.out_dir, 'pre_metrics.csv'),
+        pre_metrics.to_csv(self.pre_reweighting_metrics_path,
                            index=False)
-        post_metrics.to_csv(osp.join(self.out_dir, 'post_metrics.csv'),
+        post_metrics.to_csv(self.post_reweighting_metrics_path,
                             index=False)
 
     def get_calibration_plot(self, k_bnn):
