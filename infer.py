@@ -92,6 +92,6 @@ if __name__ == '__main__':
                          n_mc_dropout=20,
                          interim_pdf_func=norm_obj.pdf,
                          )
-    k_bnn = infer_obj.get_reweighted_bnn_kappa(1000, grid_k_kwargs)
+    k_bnn = infer_obj.get_reweighted_bnn_kappa(10000, grid_k_kwargs)
     infer_obj.get_calibration_plot(k_bnn)
     infer_obj.compute_metrics()
