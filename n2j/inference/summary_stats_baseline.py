@@ -10,6 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 import torch
 from torch_scatter import scatter_add
+import n2j.inference.infer_utils as iutils
 
 
 def get_number_counts(x, batch_indices):
@@ -169,11 +170,11 @@ class Matcher:
                                         test_x,
                                         self.train_y,
                                         t)
+                    n_matches = len(accepted)
                     np.save(osp.join(self.out_dir,
                                      f'matched_k_los_{i}_ss_{s}_{t:.1f}.npy'),
                             accepted)
                     # Add descriptive stats to overview table
-                    n_matches = len(accepted)
                     row = dict(los_i=i,
                                summary_stats_name=s,
                                threshold=t,
@@ -181,20 +182,28 @@ class Matcher:
                                n_matches=n_matches)
                     optimal_crit[t] = n_matches
                     if len(accepted) > 0:
-                        lower, med, upper = np.quantile(accepted,
+                        if interim_pdf_func is not None:
+                            inv_prior = 1.0/interim_pdf_func(accepted)
+                            resamples = iutils.resample_from_samples(accepted,
+                                                                     inv_prior,
+                                                                     n_resamples=10000,
+                                                                     plot_path=None)
+                        else:
+                            resamples = accepted  # do not weight
+                        lower, med, upper = np.quantile(resamples,
                                                         [0.5-0.34, 0.5, 0.5+0.34])
                         row.update(med=med,
                                    plus_1sig=upper-med,
                                    minus_1sig=med-lower,
-                                   mad=stats.median_abs_deviation(accepted)
+                                   mad=stats.median_abs_deviation(resamples)
                                    )
                         # Comparison with truth, if available
                         if self.test_y is not None:
-                            kde = stats.gaussian_kde(accepted,
+                            kde = stats.gaussian_kde(resamples,
                                                      bw_method='scott')
                             true_k = self.test_y[i, 0]
                             row.update(logp=kde.logpdf(true_k),
-                                       mae=np.median(np.abs(accepted - true_k)),
+                                       mae=np.median(np.abs(resamples - true_k)),
                                        true_k=true_k
                                        )
                     # Each ss name and threshold combo gets a row
