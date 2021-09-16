@@ -497,10 +497,71 @@ class InferenceManager:
         np.save(self.log_p_k_given_omega_int_path, log_p_k_given_omega_int)
         return log_p_k_given_omega_int
 
+    def get_log_p_k_given_omega_int_loop(self, interim_pdf_func, bnn=False,
+                                         ss_name='N'):
+        """Compute log(p_k|Omega_int) for BNN or summary stats samples p_k.
+
+        Parameters
+        ----------
+        interim_pdf_func : callable
+            Function that evaluates the PDF of the interim prior
+        bnn : bool, optional
+            Whether the samples are BNN's.
+            If False, understood to be summary stats matched samples.
+        ss_name : str, optional
+            Summary stats name. Only used if `bnn` is False.
+            Default: 'N'
+        """
+        sample_type = 'bnn' if bnn else 'ss'
+        if bnn:
+            raise NotImplementedError("Use the vectorized version for BNN!")
+        path = osp.join(self.matching_dir,
+                        f'log_p_k_given_omega_int_{sample_type}_list.npy')
+        if osp.exists(path):
+            return np.load(path)
+        log_p_k_given_omega_int_list = []
+        for i in range(self.n_test):
+            samples_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
+                                                 threshold=None)
+            samples_i = samples_i.reshape([1, -1])  # artificial n_test of 1
+            log_p_i = iutils.get_log_p_k_given_omega_int_analytic(k_train=None,
+                                                                  k_bnn=samples_i,
+                                                                  interim_pdf_func=interim_pdf_func)
+            # log_p_i ~ [1, len(samples_i)] so squeeze
+            log_p_k_given_omega_int_list.append(log_p_i.squeeze())
+        return log_p_k_given_omega_int_list
+
     def run_mcmc_for_omega_post(self, n_samples, n_mc_dropout,
                                 mcmc_kwargs, interim_pdf_func,
                                 bounds_lower=-np.inf, bounds_upper=np.inf):
         """Run EMCEE to obtain the posterior on test hyperparams, omega
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of BNN samples per MC iterate per sightline
+        n_mc_dropout : int
+            Number of MC dropout iterates
+        mcmc_kwargs : dict
+            Config going into `infer_utils.run_mcmc`
+        bounds_lower : np.ndarray or float, optional
+            Lower bound for target quantities
+        bounds_upper : np.ndarray or float, optional
+            Upper bound for target quantities
+        """
+        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
+                                   n_mc_dropout=n_mc_dropout)
+        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
+                                                                   n_mc_dropout,
+                                                                   interim_pdf_func)
+        iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
+                              bounds_lower, bounds_upper)
+
+    def run_mcmc_for_omega_post_ss(self, n_samples, n_mc_dropout,
+                                   mcmc_kwargs, interim_pdf_func,
+                                   bounds_lower=-np.inf, bounds_upper=np.inf):
+        """Run EMCEE to obtain the posterior on test hyperparams, omega,
+        from the summary stats samples
 
         Parameters
         ----------

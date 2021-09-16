@@ -188,6 +188,9 @@ class Matcher:
                                                                      inv_prior,
                                                                      n_resamples=10000,
                                                                      plot_path=None)
+                            np.save(osp.join(self.out_dir,
+                                             f'resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
+                                    resamples)
                         else:
                             resamples = accepted  # do not weight
                         lower, med, upper = np.quantile(resamples,
@@ -220,6 +223,36 @@ class Matcher:
                 overview = overview.append(rows_for_s, ignore_index=True)
 
         overview.to_csv(self.overview_path, index=False)
+
+    def get_samples(self, idx, ss_name, threshold=None):
+        """Get the pre-weighting (raw) accepted samples
+
+        Parameters
+        ----------
+        idx : int
+            ID of sightline
+        ss_name : str
+            Summary stats name
+        threshold : int, optional
+            Matching threshold. If None, use the optimal threshold.
+            Default: None
+
+        Returns
+        -------
+        np.ndarray
+            Samples of shape `[n_matches]`
+        """
+        if threshold is None:
+            # Default to optimal threshold
+            overview = self.get_overview_table()
+            crit = np.logical_and(np.logical_and(overview['los_i'] == idx,
+                                  overview['summary_stats_name'] == ss_name),
+                                  overview['optimal'])
+            threshold = overview[crit]['threshold'].item()
+        path = osp.join(self.out_dir,
+                        f'matched_k_los_{idx}_ss_{ss_name}_{threshold:.0f}.npy')
+        samples = np.load(path)
+        return samples
 
     def get_overview_table(self):
         if not osp.exists(self.overview_path):
