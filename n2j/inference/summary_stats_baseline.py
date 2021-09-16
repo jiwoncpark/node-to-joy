@@ -172,7 +172,7 @@ class Matcher:
                                         t)
                     n_matches = len(accepted)
                     np.save(osp.join(self.out_dir,
-                                     f'matched_k_los_{i}_ss_{s}_{t:.1f}.npy'),
+                                     f'matched_k_los_{i}_ss_{s}_{t:.0f}.npy'),
                             accepted)
                     # Add descriptive stats to overview table
                     row = dict(los_i=i,
