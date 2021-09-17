@@ -219,8 +219,8 @@ class Matcher:
                                                    min_matches=1000)
                 # Record whether each row was "optimal"
                 # There's only one optimal row for a given ss_name
-                for i, r in enumerate(rows_for_s):
-                    r.update(is_optimal=is_optimal[i])
+                for r_i, r in enumerate(rows_for_s):
+                    r.update(is_optimal=is_optimal[r_i])
                 overview = overview.append(rows_for_s, ignore_index=True)
         print(f"Saving overview table at {self.overview_path}...")
         overview.to_csv(self.overview_path, index=False)
