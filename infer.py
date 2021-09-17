@@ -69,7 +69,8 @@ if __name__ == '__main__':
     # Load trained model
     infer_obj.load_state(cfg['checkpoint_path'])
     # Get summary stats baseline
-    infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'])
+    infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'],
+                                norm_obj.pdf)
 
     # Hierarchical reweighting
     p0 = np.array([[0.01, np.log(0.04)]])
