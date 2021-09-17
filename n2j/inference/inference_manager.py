@@ -559,32 +559,6 @@ class InferenceManager:
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
 
-    def run_mcmc_for_omega_post_ss(self, ss_name,
-                                   mcmc_kwargs, interim_pdf_func,
-                                   bounds_lower=-np.inf, bounds_upper=np.inf):
-        """Run EMCEE to obtain the posterior on test hyperparams, omega,
-        from the summary stats samples
-
-        Parameters
-        ----------
-        n_samples : int
-            Number of BNN samples per MC iterate per sightline
-        n_mc_dropout : int
-            Number of MC dropout iterates
-        mcmc_kwargs : dict
-            Config going into `infer_utils.run_mcmc`
-        bounds_lower : np.ndarray or float, optional
-            Lower bound for target quantities
-        bounds_upper : np.ndarray or float, optional
-            Upper bound for target quantities
-        """
-        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int_loop(interim_pdf_func,
-                                                                        bnn=False,
-                                                                        ss_name=ss_name
-                                                                        )
-        iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
-                              bounds_lower, bounds_upper)
-
     def get_kappa_log_weights(self, idx, n_samples=None, n_mc_dropout=None,
                               interim_pdf_func=None, grid=None):
         """Get log weights for reweighted kappa posterior per sample
