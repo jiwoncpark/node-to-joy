@@ -23,6 +23,11 @@ def get_normal_logpdf(mu, log_sigma, x,
     ----
     Only normal likelihood supported for now.
 
+    Returns
+    -------
+    np.ndarray or float
+        Log PDF, of shape broadcasted across mu, log_sigma, and x
+
     """
     # logpdf = 0.5*(np.log(ivar + 1.e-7) - ivar*(x - mu)**2.0)
     candidate = np.array([mu, log_sigma])
@@ -319,6 +324,17 @@ def resample_from_pdf(grid, log_pdf, n_samples):
     return resampled
 
 
+def fit_kde_on_weighted_samples(samples, weights=None):
+    """Fit a KDE on weighted samples
+
+    """
+    samples = samples.squeeze()
+    if weights is not None:
+        weights = weights.squeeze()
+    kde = stats.gaussian_kde(samples, bw_method='scott', weights=weights)
+    return kde
+
+
 def resample_from_samples(samples, weights, n_resamples, plot_path=None):
     """Resample from a distribution defined by weighted samples
 
@@ -330,10 +346,10 @@ def resample_from_samples(samples, weights, n_resamples, plot_path=None):
     plot_path : str
         Path for the plot illustrating the KDE fit
     """
+    kde = fit_kde_on_weighted_samples(samples, weights)
     samples = samples.squeeze()
     weights = weights.squeeze()
-    kde = stats.gaussian_kde(samples, bw_method='scott', weights=weights)
-    resamples = kde.resample(n_resamples)
+    resamples = kde.resample(n_resamples).squeeze()
     if plot_path is not None:
         grid = np.linspace(-0.2, 0.2, 50)
         plt.hist(samples, density=True,

@@ -437,7 +437,7 @@ class InferenceManager:
                 ss_obj.export_stats(ss_path)
         return true_kappa
 
-    def get_summary_stats(self, thresholds):
+    def get_summary_stats(self, thresholds, interim_pdf_func=None):
         """Save accepted samples from summary statistics matching
 
         Parameters
@@ -463,7 +463,7 @@ class InferenceManager:
                                    train_k,
                                    self.matching_dir,
                                    test_k)
-        self.matcher.match_summary_stats(thresholds)
+        self.matcher.match_summary_stats(thresholds, interim_pdf_func)
         overview = self.matcher.get_overview_table()
         return overview
 
@@ -500,6 +500,8 @@ class InferenceManager:
     def get_log_p_k_given_omega_int_loop(self, interim_pdf_func, bnn=False,
                                          ss_name='N'):
         """Compute log(p_k|Omega_int) for BNN or summary stats samples p_k.
+        Useful when the number of samples differs across sightlines, so
+        the computation is not trivially vectorizable.
 
         Parameters
         ----------
@@ -557,7 +559,7 @@ class InferenceManager:
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
 
-    def run_mcmc_for_omega_post_ss(self, n_samples, n_mc_dropout,
+    def run_mcmc_for_omega_post_ss(self, ss_name,
                                    mcmc_kwargs, interim_pdf_func,
                                    bounds_lower=-np.inf, bounds_upper=np.inf):
         """Run EMCEE to obtain the posterior on test hyperparams, omega,
@@ -576,11 +578,10 @@ class InferenceManager:
         bounds_upper : np.ndarray or float, optional
             Upper bound for target quantities
         """
-        k_bnn = self.get_bnn_kappa(n_samples=n_samples,
-                                   n_mc_dropout=n_mc_dropout)
-        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int(n_samples,
-                                                                   n_mc_dropout,
-                                                                   interim_pdf_func)
+        log_p_k_given_omega_int = self.get_log_p_k_given_omega_int_loop(interim_pdf_func,
+                                                                        bnn=False,
+                                                                        ss_name=ss_name
+                                                                        )
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
 
@@ -706,12 +707,17 @@ class InferenceManager:
 
         Returns
         -------
-        TYPE
-            Description
+        tuple
+            Two arrays of shape [n_test, 1, n_resamples], first of which
+            is resamples using the grid reweighting and second of which
+            is resamples using the per-sample reweighting
         """
         if osp.exists(self.reweighted_bnn_kappa_grid_path):
-            print("Reading existing reweighted BNN kappa...")
-            return np.load(self.reweighted_bnn_kappa_grid_path)
+            if osp.exists(self.reweighted_bnn_kappa_per_sample_path):
+                print("Reading existing reweighted BNN kappa...")
+                grid = np.load(self.reweighted_bnn_kappa_grid_path)
+                per_sample = np.load(self.reweighted_bnn_kappa_per_sample_path)
+                return grid, per_sample
         n_test = len(self.test_dataset)
         k_bnn = self.get_bnn_kappa(n_samples=grid_kappa_kwargs['n_samples'],
                                    n_mc_dropout=grid_kappa_kwargs['n_mc_dropout'])
@@ -738,8 +744,7 @@ class InferenceManager:
         # Per-sample resamples for all sightlines
         np.save(self.reweighted_bnn_kappa_per_sample_path,
                 k_reweighted_per_sample)
-
-        return k_reweighted_grid
+        return k_reweighted_grid, k_reweighted_per_sample
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
                              corner_kwargs, log_idx=None):
@@ -785,7 +790,7 @@ class InferenceManager:
                 color='#d6616b',
                 label='reweighted per sample')
         # Reweighted posterior, analytical
-        reweighted_k_bnn = self.get_reweighted_bnn_kappa(None, None)[idx, 0, :]
+        reweighted_k_bnn, _ = self.get_reweighted_bnn_kappa(None, None)[idx, 0, :]
         bin_vals, bin_edges = np.histogram(reweighted_k_bnn, bins='scott',
                                            density=True)
         norm_factor = np.max(bin_vals)/np.max(w_grid)
@@ -816,7 +821,9 @@ class InferenceManager:
                            index_col=False)
 
     def compute_metrics(self):
-        """Evaluate metrics for model selection
+        """Evaluate metrics for model selection, based on per-sample
+        reweighting for fair comparison to summary stats metrics
+
         """
         columns = ['minus_sig', 'med', 'plus_sig']
         columns += ['log_p', 'mad', 'mae']
@@ -826,7 +833,7 @@ class InferenceManager:
         k_bnn_pre = self.get_bnn_kappa()
         pre_metrics = pd.DataFrame(columns=columns)
         # Metrics on post-reweighting BNN posteriors
-        k_bnn_post = self.get_reweighted_bnn_kappa(None, None)
+        _, k_bnn_post = self.get_reweighted_bnn_kappa(None, None)
         post_metrics = pd.DataFrame(columns=columns)
         # True kappa
         k_test = self.get_true_kappa(is_train=False).squeeze()
@@ -838,19 +845,17 @@ class InferenceManager:
             # Slice samples for this sightline
             pre_samples = k_bnn_pre[i, 0, :]
             post_samples = k_bnn_post[i, 0, :]
-            # Evaluate log p at truth
+            # Evaluate log p at truth, using KDE fit on samples
+            # with and without 1/prior weights
             true_k = k_test[i]
-            pre_log_p = np.log(np.load(osp.join(self.reweighted_grid_dir,
-                                                f'grid_bnn_gmm_{i}.npy')))
-            grid, post_log_p = self.get_kappa_log_weights_grid(i)
-            # Make finer resolution
-            fine_grid = np.linspace(-0.2, 0.2, 10000)
-            fine_pre_log_p = np.interp(fine_grid, grid, pre_log_p)
-            fine_post_log_p = np.interp(fine_grid, grid, post_log_p)
-            # Evaluate fine log p at truth
-            true_i = np.argmin(np.abs(fine_grid - true_k))
-            pre_stats.update(log_p=fine_pre_log_p[true_i])
-            post_stats.update(log_p=fine_post_log_p[true_i])
+            log_w = self.get_kappa_log_weights(i)  # per-sample log weights
+            pre_kde = iutils.fit_kde_on_weighted_samples(pre_samples)
+            post_kde = iutils.fit_kde_on_weighted_samples(pre_samples,
+                                                          np.exp(log_w))
+            pre_log_p = pre_kde.logpdf(true_k).item()
+            post_log_p = post_kde.logpdf(true_k).item()
+            pre_stats.update(log_p=pre_log_p)
+            post_stats.update(log_p=post_log_p)
             # Compute descriptive stats
             lower, med, upper = np.quantile(pre_samples,
                                             [0.5-0.34, 0.5, 0.5+0.34])
