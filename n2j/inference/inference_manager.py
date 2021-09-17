@@ -368,6 +368,7 @@ class InferenceManager:
         files = [self.true_test_kappa_path, self.test_summary_stats_path]
         files += [self.bnn_kappa_path, self.log_p_k_given_omega_int_path]
         files += [self.reweighted_bnn_kappa_grid_path]
+        files += [self.reweighted_bnn_kappa_per_sample_path]
         for f in files:
             if osp.exists(f):
                 print(f"Deleting {f}...")
@@ -726,6 +727,7 @@ class InferenceManager:
         omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
         if log_idx is not None:
             omega_post_samples[:, log_idx] = np.exp(omega_post_samples[:, log_idx])
+        print(f"Plotting {omega_post_samples.shape[0]} samples...")
         fig = corner.corner(omega_post_samples,
                             **corner_kwargs)
 
@@ -764,7 +766,8 @@ class InferenceManager:
                 color='#d6616b',
                 label='reweighted per sample')
         # Reweighted posterior, analytical
-        reweighted_k_bnn, _ = self.get_reweighted_bnn_kappa(None, None)[idx, 0, :]
+        reweighted_k_bnn, _ = self.get_reweighted_bnn_kappa(None, None)
+        reweighted_k_bnn = reweighted_k_bnn[idx, 0, :]
         bin_vals, bin_edges = np.histogram(reweighted_k_bnn, bins='scott',
                                            density=True)
         norm_factor = np.max(bin_vals)/np.max(w_grid)

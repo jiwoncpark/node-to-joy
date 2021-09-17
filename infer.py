@@ -71,7 +71,6 @@ if __name__ == '__main__':
     # Get summary stats baseline
     infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'],
                                 norm_obj.pdf)
-
     # Hierarchical reweighting
     p0 = np.array([[0.01, np.log(0.04)]])
     p0 = p0 + np.random.randn(cfg['extra_mcmc_kwargs']['n_walkers'],
