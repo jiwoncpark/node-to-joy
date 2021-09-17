@@ -188,8 +188,9 @@ class Matcher:
                                                                      inv_prior,
                                                                      n_resamples=10000,
                                                                      plot_path=None)
+                            resamples = resamples.squeeze()  # [n_resamples]
                             np.save(osp.join(self.out_dir,
-                                             f'resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
+                                             f'matched_resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
                                     resamples)
                         else:
                             resamples = accepted  # do not weight
@@ -205,7 +206,7 @@ class Matcher:
                             kde = stats.gaussian_kde(resamples,
                                                      bw_method='scott')
                             true_k = self.test_y[i, 0]
-                            row.update(logp=kde.logpdf(true_k),
+                            row.update(logp=kde.logpdf(true_k).item(),
                                        mae=np.median(np.abs(resamples - true_k)),
                                        true_k=true_k
                                        )
@@ -221,7 +222,7 @@ class Matcher:
                 for i, r in enumerate(rows_for_s):
                     r.update(is_optimal=is_optimal[i])
                 overview = overview.append(rows_for_s, ignore_index=True)
-
+        print(f"Saving overview table at {self.overview_path}...")
         overview.to_csv(self.overview_path, index=False)
 
     def get_samples(self, idx, ss_name, threshold=None):
