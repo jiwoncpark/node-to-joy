@@ -14,7 +14,7 @@ import scipy.stats
 from tqdm import tqdm
 import torch
 from torch.utils.data.dataset import ConcatDataset
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
 from n2j.trainval_data.utils import coord_utils as cu
 from n2j.trainval_data.utils.running_stats import RunningStats
@@ -96,7 +96,8 @@ class CosmoDC2Graph(ConcatDataset):
         """
         loader_dict = dict(X=lambda b: b.x,  # node features x
                            Y_local=lambda b: b.y_local,  # node labels y_local
-                           Y=lambda b: b.y,)  # graph labels y
+                           Y=lambda b: b.y,
+                           X_meta=lambda b: b.x_meta)  # graph labels y
         rs = RunningStats(loader_dict)
         y_class_counts = 0  # [n_classes,] where n_classes = number of bins
         y_class = torch.zeros(len(self), dtype=torch.long)  # [n_train,]
@@ -431,7 +432,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
                                      los_info['final_gamma1'],
                                      los_info['final_gamma2']]])  # [1, 3]
         x_meta = torch.FloatTensor([[x.shape[0],
-                                   np.sum(1.0/nodes['r'].values)]])  # [1, 2]
+                                   np.sum(1.0/(nodes['r'].values + 1.e-5))]])  # [1, 2]
         # Vestiges of adhoc edge definitions
         # edge_index = self.get_edges(nodes[['ra_true', 'dec_true']].values)
         # data = Subgraph(x, global_y, edge_index)
