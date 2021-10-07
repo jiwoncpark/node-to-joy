@@ -106,8 +106,8 @@ class CosmoDC2Graph(ConcatDataset):
         else:
             subsample_weight = np.zeros(len(self))  # [n_train,]
         y_values_orig = np.zeros(len(self))
-        batch_size = 1000
-        dummy_loader = DataLoader(self,
+        batch_size = 2000 if self.n_cores < 8 else 10000
+        dummy_loader = DataLoader(dataset=self,
                                   batch_size=batch_size,
                                   shuffle=False,
                                   num_workers=self.num_workers,
@@ -167,10 +167,14 @@ class CosmoDC2Graph(ConcatDataset):
             y_weight = None
             print("Y_mean with resampling: ", rs.stats['Y_mean'])
             print("Y_std with resampling: ", rs.stats['Y_var']**0.5)
+            print("X_meta_mean with resampling: ", rs.stats['X_meta_mean'])
+            print("X_meta_std with resampling: ", rs.stats['X_meta_var']**0.5)
         stats = dict(X_mean=rs.stats['X_mean'], X_std=rs.stats['X_var']**0.5,
                      Y_mean=rs.stats['Y_mean'], Y_std=rs.stats['Y_var']**0.5,
                      Y_local_mean=rs.stats['Y_local_mean'],
                      Y_local_std=rs.stats['Y_local_var']**0.5,
+                     X_meta_mean=rs.stats['X_meta_mean'],
+                     X_meta_std=rs.stats['X_meta_var']**0.5,
                      y_weight=y_weight,  # [n_train,] or None
                      subsample_idx=subsample_idx,
                      class_weight=class_weight,  # [n_classes,] or None
