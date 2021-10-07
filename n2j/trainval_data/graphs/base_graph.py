@@ -14,7 +14,8 @@ class Subgraph(Data):
     """Subgraph representing a single sightline
 
     """
-    def __init__(self, x, y_local, y, x_meta, y_class=None, edge_index=None):
+    def __init__(self, x=None, y_local=None, y=None, x_meta=None,
+                 y_class=None, edge_index=None):
         """
 
         Parameters
