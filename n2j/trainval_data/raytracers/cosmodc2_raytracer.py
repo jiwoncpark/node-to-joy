@@ -108,14 +108,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
         cat_path = os.path.join(self.in_dir,
                                 'cosmodc2_{:d}'.format(self.healpix), 'raw',
                                 'pointings_{:d}.csv'.format(self.healpix))
-        if self.debug:
-            cat = pd.read_csv(cat_path, chunksize=50, nrows=1000,
-                              usecols=columns)
-            # Include z~2 galaxies
-            fake_z = np.maximum(0.1, self.approx_z_src + np.random.randn(100))
-            cat['redshift'] = fake_z
-        else:
-            cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
+        cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
                               usecols=columns)
         return cat
 
@@ -130,11 +123,7 @@ class CosmoDC2Raytracer(BaseRaytracer):
         cat_path = os.path.join(self.in_dir,
                                 'cosmodc2_{:d}'.format(self.healpix), 'raw',
                                 'halos_{:d}.csv'.format(self.healpix))
-        if self.debug:
-            cat = pd.read_csv(cat_path, chunksize=50, nrows=1000,
-                              usecols=halos_cols)
-        else:
-            cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
+        cat = pd.read_csv(cat_path, chunksize=chunksize, nrows=None,
                               usecols=halos_cols)
         return cat
 
