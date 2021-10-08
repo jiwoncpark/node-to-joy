@@ -14,7 +14,7 @@ import scipy.stats
 from tqdm import tqdm
 import torch
 from torch.utils.data.dataset import ConcatDataset
-from torch_geometric.loader import DataLoader
+from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.base_graph import BaseGraph, Subgraph
 from n2j.trainval_data.utils import coord_utils as cu
 from n2j.trainval_data.utils.running_stats import RunningStats

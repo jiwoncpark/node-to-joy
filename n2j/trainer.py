@@ -13,7 +13,7 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 from torch.utils.data.sampler import WeightedRandomSampler
-from torch_geometric.loader import DataLoader
+from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import (ComposeXYLocal,
