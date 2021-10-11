@@ -438,7 +438,8 @@ class InferenceManager:
                 ss_obj.export_stats(ss_path)
         return true_kappa
 
-    def get_summary_stats(self, thresholds, interim_pdf_func=None):
+    def get_summary_stats(self, thresholds, interim_pdf_func=None,
+                          match=True):
         """Save accepted samples from summary statistics matching
 
         Parameters
@@ -464,7 +465,8 @@ class InferenceManager:
                                    train_k,
                                    self.matching_dir,
                                    test_k)
-        self.matcher.match_summary_stats(thresholds, interim_pdf_func)
+        if match:
+            self.matcher.match_summary_stats(thresholds, interim_pdf_func)
         overview = self.matcher.get_overview_table()
         return overview
 
@@ -559,6 +561,38 @@ class InferenceManager:
                                                                    interim_pdf_func)
         iutils.get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
                               bounds_lower, bounds_upper)
+
+    def run_mcmc_for_omega_post_summary_stats(self, ss_name,
+                                              mcmc_kwargs,
+                                              interim_pdf_func,
+                                              bounds_lower=-np.inf,
+                                              bounds_upper=np.inf):
+        """Run EMCEE to obtain the posterior on test hyperparams, omega
+        using the matched summary statistics samples, rather than BNN
+        posterior samples
+
+        Parameters
+        ----------
+        ss_name : str
+            What kind of summary stats to query (one of 'N', 'N_inv_dist')
+        mcmc_kwargs : dict
+            Config going into `infer_utils.run_mcmc`
+        bounds_lower : np.ndarray or float, optional
+            Lower bound for target quantities
+        bounds_upper : np.ndarray or float, optional
+            Upper bound for target quantities
+        """
+
+        log_p_k_given_omega_int_list = self.get_log_p_k_given_omega_int_loop(interim_pdf_func,
+                                                                             bnn=False,
+                                                                             ss_name=ss_name)
+        samples = []
+        for i in range(self.n_test):
+            samples_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
+                                                 threshold=None)
+            samples.append(samples_i)
+        iutils.get_omega_post_loop(samples, log_p_k_given_omega_int_list, mcmc_kwargs,
+                                   bounds_lower, bounds_upper)
 
     def get_kappa_log_weights(self, idx, n_samples=None, n_mc_dropout=None,
                               interim_pdf_func=None, grid=None):
@@ -730,7 +764,6 @@ class InferenceManager:
         print(f"Plotting {omega_post_samples.shape[0]} samples...")
         fig = corner.corner(omega_post_samples,
                             **corner_kwargs)
-
         fig.savefig(osp.join(self.out_dir, 'omega_post.pdf'))
 
     def visualize_kappa_post(self, idx, n_samples, n_mc_dropout,
