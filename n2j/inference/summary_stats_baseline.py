@@ -248,7 +248,7 @@ class Matcher:
             overview = self.get_overview_table()
             crit = np.logical_and(np.logical_and(overview['los_i'] == idx,
                                   overview['summary_stats_name'] == ss_name),
-                                  overview['optimal'])
+                                  overview['is_optimal'])
             threshold = overview[crit]['threshold'].item()
         path = osp.join(self.out_dir,
                         f'matched_k_los_{idx}_ss_{ss_name}_{threshold:.0f}.npy')
