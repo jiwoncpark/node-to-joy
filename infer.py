@@ -70,7 +70,7 @@ if __name__ == '__main__':
     infer_obj.load_state(cfg['checkpoint_path'])
     # Get summary stats baseline
     infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'],
-                                norm_obj.pdf)
+                                norm_obj.pdf, match=True)
     # Hierarchical reweighting
     p0 = np.array([[0.01, np.log(0.04)]])
     p0 = p0 + np.random.randn(cfg['extra_mcmc_kwargs']['n_walkers'],
@@ -80,13 +80,43 @@ if __name__ == '__main__':
                        **cfg['extra_mcmc_kwargs']
                        )
     if cfg['run_mcmc']:
+        # MCMC over BNN posteriors
+        mcmc_kwargs = dict(p0=p0,
+                           chain_path=os.path.join(infer_obj.out_dir, 'omega_chain.h5'),
+                           **cfg['extra_mcmc_kwargs']
+                           )
         infer_obj.run_mcmc_for_omega_post(n_samples=1000,
                                           n_mc_dropout=20,
                                           mcmc_kwargs=mcmc_kwargs,
                                           interim_pdf_func=norm_obj.pdf,
                                           bounds_lower=np.array([-0.5, -6]),
-                                          bounds_upper=np.array([1.5, 0])
+                                          bounds_upper=np.array([1.5, 0]),
                                           )
+        # MCMC over unweighted N summary stats
+        mcmc_kwargs_N = dict(p0=p0,
+                             chain_path=os.path.join(infer_obj.out_dir,
+                                                     'omega_chain_N.h5'),
+                             **cfg['extra_mcmc_kwargs']
+                             )
+        infer_obj.run_mcmc_for_omega_post_summary_stats('N',
+                                                        mcmc_kwargs=mcmc_kwargs_N,
+                                                        interim_pdf_func=norm_obj.pdf,
+                                                        bounds_lower=np.array([-0.5, -6]),
+                                                        bounds_upper=np.array([1.5, 0])
+                                                        )
+        # MCMC over inv-dist N summary stats
+        mcmc_kwargs_N_inv_dist = dict(p0=p0,
+                                      chain_path=os.path.join(infer_obj.out_dir,
+                                                              'omega_chain_N_inv_dist.h5'),
+                                      **cfg['extra_mcmc_kwargs']
+                                      )
+        infer_obj.run_mcmc_for_omega_post_summary_stats('N_inv_dist',
+                                                        mcmc_kwargs=mcmc_kwargs_N_inv_dist,
+                                                        interim_pdf_func=norm_obj.pdf,
+                                                        bounds_lower=np.array([-0.5, -6]),
+                                                        bounds_upper=np.array([1.5, 0])
+                                                        )
+
     grid_k_kwargs = dict(grid=np.linspace(-0.2, 0.2, 1000),
                          n_samples=1000,
                          n_mc_dropout=20,
