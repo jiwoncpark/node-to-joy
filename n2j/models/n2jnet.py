@@ -55,7 +55,8 @@ class N2JNet(Module):
                  dim_hidden=20, dim_pre_aggr=20, n_iter=20, n_out_layers=5,
                  global_flow=False,
                  dropout=0.0,
-                 class_weight=None):
+                 class_weight=None,
+                 use_ss=True):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
 
@@ -78,6 +79,8 @@ class N2JNet(Module):
             fraction of weights to zero during training and testing,
             for MC dropout. Default: 0.0
         class_weight : torch.tensor
+        use_ss : bool, True
+            Whether to use summary stats to init global encoding.
 
 
         """
@@ -103,6 +106,17 @@ class N2JNet(Module):
                                  MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_local),
                                  LayerNorm(self.dim_local))
+        # MLP for initially encoding global
+        self.use_ss = use_ss
+        if self.use_ss:
+            self.mlp_global_init = Seq(Lin(self.dim_in_meta, self.dim_hidden),
+                                       ReLU(),
+                                       MCDropout(self.dropout),
+                                       Lin(self.dim_hidden, self.dim_hidden),
+                                       ReLU(),
+                                       MCDropout(self.dropout),
+                                       Lin(self.dim_hidden, self.dim_local),
+                                       LayerNorm(self.dim_global))
         # MLPs for encoding local and global
         meta_layers = ModuleList()
         for i in range(self.n_iter):
@@ -141,11 +155,15 @@ class N2JNet(Module):
 
     def forward(self, data):
         x = data.x  # [n_nodes, n_features]
+        x_meta = data.x_meta  # [batch_size, 2]
         batch = data.batch  # [batch_size,]
         batch_size = data.y.shape[0]
         # Init node and global encodings x, u
         x = self.mlp_node_init(x)  # [n_nodes, dim_local]
-        u = torch.zeros(batch_size, self.dim_global).to(x.dtype).to(x.device)
+        if self.use_ss:
+            u = self.mlp_global_init(x_meta)
+        else:
+            u = torch.zeros(batch_size, self.dim_global).to(x.dtype).to(x.device)
         for i, meta in enumerate(self.meta_layers):
             x, u = meta(x=x, u=u, batch=batch)
         # x : [n_nodes, dim_local]
