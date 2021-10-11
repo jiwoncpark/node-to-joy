@@ -232,11 +232,9 @@ class CosmoDC2Graph(ConcatDataset):
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         data = self.datasets[dataset_idx][sample_idx]
         if self.transform_X_Y_local is not None:
-            data.x,
-            data.y_local,
-            data.x_meta = self.transform_X_Y_local(data.x,
-                                                   data.y_local,
-                                                   data.x_meta)
+            data.x, data.y_local, data.x_meta = self.transform_X_Y_local(data.x,
+                                                                         data.y_local,
+                                                                         data.x_meta)
         if self.transform_Y is not None:
             data.y = self.transform_Y(data.y)
         return data

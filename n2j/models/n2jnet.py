@@ -56,7 +56,8 @@ class N2JNet(Module):
                  global_flow=False,
                  dropout=0.0,
                  class_weight=None,
-                 use_ss=True):
+                 use_ss=True,
+                 dim_in_meta=2):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
 
@@ -97,6 +98,7 @@ class N2JNet(Module):
         self.global_flow = global_flow
         self.class_weight = class_weight
         self.dropout = dropout
+        self.dim_in_meta = dim_in_meta
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -115,7 +117,7 @@ class N2JNet(Module):
                                        Lin(self.dim_hidden, self.dim_hidden),
                                        ReLU(),
                                        MCDropout(self.dropout),
-                                       Lin(self.dim_hidden, self.dim_local),
+                                       Lin(self.dim_hidden, self.dim_global),
                                        LayerNorm(self.dim_global))
         # MLPs for encoding local and global
         meta_layers = ModuleList()

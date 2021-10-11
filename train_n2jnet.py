@@ -5,6 +5,8 @@ import os
 from scipy import stats
 from n2j.trainer import Trainer
 from n2j.config_utils import get_config
+import torch
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 if __name__ == '__main__':
     cfg = get_config()
