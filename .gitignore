@@ -7,7 +7,10 @@
 *.h5
 *.hdf5
 *.png
+*.pdf
 n2j/data/
+cosmodc2_*
+dummy/*
 
 # NERSC
 *.sl
