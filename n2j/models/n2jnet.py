@@ -1,7 +1,7 @@
 from typing import Optional, Tuple
 from torch import Tensor
 import torch
-from torch.nn import (Module, ModuleList, ReLU, LayerNorm,
+from torch.nn import (Module, ModuleList, ReLU, LeakyReLU, LayerNorm,
                       Sequential as Seq, Linear as Lin)
 from torch_scatter import scatter_add
 from torch_geometric.nn import MetaLayer
@@ -57,7 +57,8 @@ class N2JNet(Module):
                  dropout=0.0,
                  class_weight=None,
                  use_ss=True,
-                 dim_in_meta=2):
+                 dim_in_meta=2,
+                 weight_sum=True):
         """Edgeless graph neural network modeling relationships among nodes
         and between nodes and global
 
@@ -82,6 +83,8 @@ class N2JNet(Module):
         class_weight : torch.tensor
         use_ss : bool, True
             Whether to use summary stats to init global encoding.
+        weight_sum : bool, True
+            Whether to learn the weights for aggregating node features.
 
 
         """
@@ -99,6 +102,7 @@ class N2JNet(Module):
         self.class_weight = class_weight
         self.dropout = dropout
         self.dim_in_meta = dim_in_meta
+        self.weight_sum = weight_sum
         # MLP for initially encoding local
         self.mlp_node_init = Seq(Lin(self.dim_in, self.dim_hidden),
                                  ReLU(),
@@ -126,7 +130,8 @@ class N2JNet(Module):
                                    self.dim_hidden, self.dropout)
             global_model = GlobalModel(self.dim_local, self.dim_global,
                                        self.dim_hidden, self.dim_pre_aggr,
-                                       self.dropout)
+                                       self.dropout,
+                                       weight_sum=self.weight_sum)
             meta = CustomMetaLayer(node_model=node_model, global_model=global_model)
             meta_layers.append(meta)
         self.meta_layers = meta_layers
@@ -151,6 +156,7 @@ class N2JNet(Module):
                                       ReLU(),
                                       MCDropout(self.dropout),
                                       Lin(self.dim_hidden, self.dim_out_global*2))
+
         # Losses
         self.local_nll = DiagonalGaussianNLL(dim_out_local)
         self.global_nll = DiagonalGaussianNLL(dim_out_global)
@@ -241,7 +247,7 @@ class NodeModel(Module):
 
 class GlobalModel(Module):
     def __init__(self, dim_local, dim_global, dim_hidden, dim_pre_aggr,
-                 dropout):
+                 dropout, weight_sum):
         """MLP governing the global representation
 
         """
@@ -252,6 +258,7 @@ class GlobalModel(Module):
         self.dim_concat = self.dim_local + self.dim_global
         self.dim_pre_aggr = dim_pre_aggr
         self.dropout = dropout
+        self.weight_sum = weight_sum
 
         # MLP prior to aggregating node encodings
         self.mlp_pre_aggr = Seq(Lin(self.dim_concat, self.dim_hidden),
@@ -271,11 +278,22 @@ class GlobalModel(Module):
                                  MCDropout(self.dropout),
                                  Lin(self.dim_hidden, self.dim_global),
                                  LayerNorm(self.dim_global))
+        # Modeled after attention, e.g.
+        # https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/nn/conv/gat_conv.html
+        if self.weight_sum:
+            self.node_alpha = Seq(Lin(self.dim_pre_aggr, 1),  # fix n_heads = 1
+                                  LeakyReLU(negative_slope=0.01))
 
     def forward(self, x, u, batch):
         out = torch.cat([x, u[batch]], dim=-1)  # [n_nodes, dim_local + dim_global]
         out = self.mlp_pre_aggr(out)  # [n_nodes, self.dim_pre_aggr]
-        out = scatter_add(out, batch, dim=0)  # [batch_size, dim_pre_aggr]
+        if self.weight_sum:
+            alpha = self.node_alpha(out)  # [n_nodes, 1]
+            alpha = F.softmax(alpha, dim=0)  # [n_nodes, 1] the weights
+            alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+            out = scatter_add(out*alpha, batch, dim=0)  # [batch_size, dim_pre_aggr]
+        else:
+            out = scatter_add(out, batch, dim=0)  # [batch_size, dim_pre_aggr]
         out = torch.cat([out, u], dim=-1)  # [batch_size, dim_pre_aggr + dim_global]
         out = self.mlp_post_aggr(out)  # [batch_size, dim_global]
         out += u  # [batch_size, dim_global]
