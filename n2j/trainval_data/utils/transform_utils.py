@@ -11,14 +11,16 @@ class ComposeXYLocal:
                  transforms_Y_local_pre=[],
                  transforms_X_Y_local=[],
                  transforms_X_post=[],
-                 transforms_Y_local_post=[]):
+                 transforms_Y_local_post=[],
+                 transforms_X_meta_post=[]):
         self.transforms_X_pre = transforms_X_pre
         self.transforms_Y_local_pre = transforms_Y_local_pre
         self.transforms_X_Y_local = transforms_X_Y_local
         self.transforms_X_post = transforms_X_post
         self.transforms_Y_local_post = transforms_Y_local_post
+        self.transforms_X_meta_post = transforms_X_meta_post
 
-    def __call__(self, x, y_local):
+    def __call__(self, x, y_local, x_meta):
         for t in self.transforms_X_pre:
             x = t(x)
         for t in self.transforms_Y_local_pre:
@@ -29,7 +31,9 @@ class ComposeXYLocal:
             x = t(x)
         for t in self.transforms_Y_local_post:
             y_local = t(y_local)
-        return x, y_local
+        for t in self.transforms_X_meta_post:
+            x_meta = t(x_meta)
+        return x, y_local, x_meta
 
 
 def get_idx(orig_list, sub_list):
