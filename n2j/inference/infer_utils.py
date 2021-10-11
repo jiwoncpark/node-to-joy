@@ -80,7 +80,7 @@ def run_mcmc(log_prob, log_prob_kwargs, p0, n_run, n_burn, chain_path,
     if plot_chain:
         samples = sampler.get_chain(flat=True)
         get_chain_plot(samples, os.path.join(os.path.dirname(chain_path),
-                                             'mcmc_chain.png'))
+                                             f'mcmc_chain_{os.path.split(chain_path)[1]}.png'))
 
 
 def get_chain_plot(samples, out_path='mcmc_chain.png'):
@@ -198,6 +198,43 @@ def get_omega_post(k_bnn, log_p_k_given_omega_int, mcmc_kwargs,
     run_mcmc(log_prob_mcmc, **mcmc_kwargs)
 
 
+def get_omega_post_loop(k_samples_list, log_p_k_given_omega_int_list,
+                        mcmc_kwargs,
+                        bounds_lower, bounds_upper):
+    """Sample from p(Omega|{d}) using MCMC
+
+    Parameters
+    ----------
+    k_samples_list : list
+        Each element is the array of samples for a sightline, so the
+        list has length `n_test`
+    log_p_k_given_omega_int_list : list
+        Each element is the array of log p(k_samples|Omega_int) for a
+        sightline, so the list has length `n_test`
+
+    """
+    np.random.seed(42)
+
+    n_test = len(k_samples_list)
+    log_p_k_given_omega_func_list = []
+    for los_i in range(n_test):
+        log_p_k_given_omega_func_list.append(partial(get_normal_logpdf,
+                                                     x=k_samples_list[los_i],
+                                                     bounds_lower=bounds_lower,
+                                                     bounds_upper=bounds_upper))
+    kwargs = dict(
+                  log_p_k_given_omega_func_list=log_p_k_given_omega_func_list,
+                  log_p_k_given_omega_int_list=log_p_k_given_omega_int_list
+                  )
+    mcmc_kwargs['log_prob_kwargs'] = kwargs
+
+    if DEBUG:
+        print("n_test")
+        print(len(k_samples_list), len(log_p_k_given_omega_int_list))
+        print(len(log_p_k_given_omega_func_list))
+    run_mcmc(log_prob_mcmc_loop, **mcmc_kwargs)
+
+
 def log_prob_mcmc(omega, log_p_k_given_omega_func, log_p_k_given_omega_int):
     """Evaluate the MCMC objective
 
@@ -227,6 +264,46 @@ def log_prob_mcmc(omega, log_p_k_given_omega_func, log_p_k_given_omega_int):
     assert not np.isnan(log_p_k_given_omega_int).any()
     assert not np.isinf(log_p_k_given_omega_int).any()
     log_prob = mean_over_samples.sum()  # summed over sightlines
+    # log_prob = log_prob - n_test*np.log(n_samples)  # normalization
+    return log_prob
+
+
+def log_prob_mcmc_loop(omega, log_p_k_given_omega_func_list,
+                       log_p_k_given_omega_int_list):
+    """Evaluate the MCMC objective
+
+    Parameters
+    ----------
+    omega : list
+        Current MCMC sample of [mu, log_sigma] = Omega
+    log_p_k_given_omega_func_list : list of callable
+        List of functions that returns p(k|Omega) of shape [n_samples]
+        for given omega and k fixed to be the posterior samples
+    log_p_k_given_omega_int_list : np.ndarray
+        List of values of p(k|Omega_int) of shape [n_samples] for k
+        fixed to be the posterior samples
+
+    Returns
+    -------
+    float
+        Description
+
+    """
+    n_test = len(log_p_k_given_omega_int_list)
+    mean_over_samples_dataset = np.empty(n_test)
+    for los_i in range(n_test):
+        # log_p_k_given_omega ~ [n_samples]
+        log_p_k_given_omega = log_p_k_given_omega_func_list[los_i](omega[0], omega[1])
+        log_ratio = log_p_k_given_omega - log_p_k_given_omega_int_list[los_i]  # [n_samples]
+        # print(len(log_ratio), len(log_p_k_given_omega), len(log_p_k_given_omega_int_list[los_i]))
+        mean_over_samples = special.logsumexp(log_ratio,
+                                              # normalization
+                                              b=1.0/len(log_ratio))  # scalar
+        mean_over_samples_dataset[los_i] = mean_over_samples
+    good = mean_over_samples_dataset[np.isfinite(mean_over_samples_dataset)]
+    # assert not np.isnan(mean_over_samples_dataset).any()
+    # assert not np.isinf(mean_over_samples_dataset).any()
+    log_prob = good.sum()  # summed over sightlines
     # log_prob = log_prob - n_test*np.log(n_samples)  # normalization
     return log_prob
 
