@@ -21,6 +21,7 @@ docs/_build/*
 
 # Notebook
 *ipynb_checkpoints
+demo/*
 
 # Compiled python modules.
 *.pyc
