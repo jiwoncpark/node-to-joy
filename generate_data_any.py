@@ -38,6 +38,7 @@ if __name__ == '__main__':
         kappa_sampler.parallel_raytrace(n_cores=200)
         kappa_sampler.apply_calibration()
     # Use this to infer the mean kappa contribution of new sightlines
+    
     for hp in TRAIN_HP:
         print(f"Raytracing for healpix {hp}...")
         train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
