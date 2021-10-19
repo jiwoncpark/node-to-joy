@@ -70,7 +70,9 @@ if __name__ == '__main__':
     infer_obj.load_state(cfg['checkpoint_path'])
     # Get summary stats baseline
     infer_obj.get_summary_stats(cfg['summary_stats']['thresholds'],
-                                norm_obj.pdf, match=True)
+                                norm_obj.pdf, 
+                                match=True, 
+                                min_matches=cfg['summary_stats']['min_matches'])
     # Hierarchical reweighting
     p0 = np.array([[0.01, np.log(0.04)]])
     p0 = p0 + np.random.randn(cfg['extra_mcmc_kwargs']['n_walkers'],
@@ -123,6 +125,6 @@ if __name__ == '__main__':
                          interim_pdf_func=norm_obj.pdf,
                          )
     # Use the per-sample reweighted samples for calibration plot
-    _, k_bnn = infer_obj.get_reweighted_bnn_kappa(10000, grid_k_kwargs)
-    infer_obj.get_calibration_plot(k_bnn)
+    k_bnn_analytic, k_bnn = infer_obj.get_reweighted_bnn_kappa(10000, grid_k_kwargs)
+    infer_obj.get_calibration_plot(k_bnn_analytic)
     infer_obj.compute_metrics()
