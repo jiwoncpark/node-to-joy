@@ -134,7 +134,8 @@ class Matcher:
         os.makedirs(self.out_dir, exist_ok=True)
         self.overview_path = osp.join(self.out_dir, 'overview.csv')
 
-    def match_summary_stats(self, thresholds, interim_pdf_func=None):
+    def match_summary_stats(self, thresholds, interim_pdf_func=None,
+                            min_matches=1000):
         """Match summary stats between train and test
 
         Parameters
@@ -184,10 +185,13 @@ class Matcher:
                     if len(accepted) > 0:
                         if interim_pdf_func is not None:
                             inv_prior = 1.0/interim_pdf_func(accepted)
-                            resamples = iutils.resample_from_samples(accepted,
-                                                                     inv_prior,
-                                                                     n_resamples=10000,
-                                                                     plot_path=None)
+                            try:
+                                resamples = iutils.resample_from_samples(accepted,
+                                                                         inv_prior,
+                                                                         n_resamples=10000,
+                                                                         plot_path=None)
+                            except ValueError:
+                                print("Accepted samples were of shape", accepted.shape)
                             resamples = resamples.squeeze()  # [n_resamples]
                             np.save(osp.join(self.out_dir,
                                              f'matched_resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
@@ -214,9 +218,15 @@ class Matcher:
                     # Wait until all thresholds are collected to append
                     rows_for_s.append(row)
                 # Determine optimal threshold
-                is_optimal = get_optimal_threshold(thresholds[s],
-                                                   optimal_crit,
-                                                   min_matches=1000)
+                try:
+                    is_optimal = get_optimal_threshold(thresholds[s],
+                                                       optimal_crit,
+                                                       min_matches=min_matches)
+                except:
+                    print("Summary stat: ", s)
+                    print("Thresholds: ", thresholds[s])
+                    print("Optimal criterion: ", optimal_crit)
+                    raise ValueError("Can't find the optimal threshold!")
                 # Record whether each row was "optimal"
                 # There's only one optimal row for a given ss_name
                 for r_i, r in enumerate(rows_for_s):

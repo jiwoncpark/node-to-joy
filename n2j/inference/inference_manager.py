@@ -439,7 +439,7 @@ class InferenceManager:
         return true_kappa
 
     def get_summary_stats(self, thresholds, interim_pdf_func=None,
-                          match=True):
+                          match=True, min_matches=1000):
         """Save accepted samples from summary statistics matching
 
         Parameters
@@ -466,7 +466,8 @@ class InferenceManager:
                                    self.matching_dir,
                                    test_k)
         if match:
-            self.matcher.match_summary_stats(thresholds, interim_pdf_func)
+            self.matcher.match_summary_stats(thresholds, interim_pdf_func,
+                                             min_matches=min_matches)
         overview = self.matcher.get_overview_table()
         return overview
 
