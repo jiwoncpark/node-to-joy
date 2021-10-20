@@ -17,6 +17,7 @@ from torch_geometric.data import DataLoader
 from n2j.trainval_data.graphs.cosmodc2_graph import CosmoDC2Graph
 import n2j.models as models
 from n2j.trainval_data.utils.transform_utils import (ComposeXYLocal,
+                                                     Metadata,
                                                      Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
@@ -115,6 +116,7 @@ class Trainer:
                                             **noise_kwargs['mag'])
             magcut = Rejector(self.sub_features, **detection_kwargs)
             norming = Standardizer(self.X_mean, self.X_std)
+            editing_X_meta = Metadata(self.sub_features, ['ra_true', 'dec_true'])
             norming_X_meta = Standardizer(stats['X_meta_mean'],
                                           stats['X_meta_std'])
             # Transforming local Y
@@ -130,7 +132,7 @@ class Trainer:
                                                       [magcut],
                                                       [norming],
                                                       [norming_Y_local],
-                                                      [norming_X_meta])
+                                                      [editing_X_meta, norming_X_meta])
             # Transforming global Y
             idx_Y = get_idx(target, self.sub_target)
             self.Y_mean = stats['Y_mean'][:, idx_Y]
