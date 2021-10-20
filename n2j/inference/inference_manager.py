@@ -117,6 +117,9 @@ class InferenceManager:
                                             **noise_kwargs['mag'])
             magcut = Rejector(self.sub_features, **detection_kwargs)
             norming = Standardizer(self.X_mean, self.X_std)
+            editing_X_meta = Metadata(self.sub_features, ['ra_true', 'dec_true'])
+            norming_X_meta = Standardizer(stats['X_meta_mean'],
+                                          stats['X_meta_std'])
             # Transforming local Y
             idx_Y_local = get_idx(target_local, self.sub_target_local)
             self.Y_local_mean = stats['Y_local_mean'][:, idx_Y_local]
@@ -129,7 +132,8 @@ class InferenceManager:
                                                       [slicing_Y_local],
                                                       [magcut],
                                                       [norming],
-                                                      [norming_Y_local])
+                                                      [norming_Y_local],
+                                                      [editing_X_meta, norming_X_meta])
             # Transforming global Y
             idx_Y = get_idx(target, self.sub_target)
             self.Y_mean = stats['Y_mean'][:, idx_Y]
