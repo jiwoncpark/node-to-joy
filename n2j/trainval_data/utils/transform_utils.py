@@ -47,16 +47,19 @@ class Metadata:
     def __init__(self, 
                  all_features=['ra_true', 'dec_true', 'u', 'g', 'r', 'i', 'z', 'y'], 
                  pos_features=['ra_true', 'dec_true']):
-        """Transform class for computing metadata based on transformed X
+        """Transform class for computing metadata based on transformed X.
+        Metadata are unweighted and weighted number counts, where the weights are
+        inverse distances.
 
         Parameters
         ----------
         all_features : list, optional
             All the existing features, including position features.
-            Warning: must be the list after slicing!
+            Warning: must be the list after slicing! 
         pos_features : list, optional
             Euclidean-ized position features to compute metadata with.
-            Warning: must be included in all_features!
+            Warning: any set of transforms, including normalization,
+            is already applied to the positions, so these aren't in physical units.
             
         """
         self.pos_idx = get_idx(all_features, pos_features)
