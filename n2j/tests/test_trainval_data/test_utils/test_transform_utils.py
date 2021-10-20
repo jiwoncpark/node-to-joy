@@ -1,10 +1,23 @@
 import unittest
 import numpy as np
 import torch
-from n2j.trainval_data.utils.transform_utils import (Rejector,
+from n2j.trainval_data.utils.transform_utils import (Metadata,
+                                                     Rejector,
                                                      MagErrorSimulator,
                                                      MagErrorSimulatorTorch,
                                                      get_bands_in_x)
+
+class TestMetadata(unittest.TestCase):
+    """A suite of tests verifying metadata computation
+    
+    """
+    def test_correctness(self):
+        meta_transform = Metadata(['x', 'y'], ['x', 'y'])
+        x = torch.FloatTensor([[3, 4], [5, 12], [8, 15]])
+        x_meta, _ = meta_transform(x_meta=None, x=x)
+        N_inv_dist = 1/(5.0+1.e-5) + 1/(13.0+1.e-5) + 1/(17.0+1.e-5)
+        x_meta_correct = torch.FloatTensor([[3, N_inv_dist]])
+        np.testing.assert_array_equal(x_meta, x_meta_correct)
 
 
 class TestRejector(unittest.TestCase):

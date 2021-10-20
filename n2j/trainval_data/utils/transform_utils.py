@@ -32,7 +32,7 @@ class ComposeXYLocal:
         for t in self.transforms_Y_local_post:
             y_local = t(y_local)
         for t in self.transforms_X_meta_post:
-            x_meta = t(x_meta)
+            x_meta, x = t(x_meta, x)
         return x, y_local, x_meta
 
 
@@ -43,12 +43,39 @@ def get_idx(orig_list, sub_list):
     return idx
 
 
+class Metadata:
+    def __init__(self, 
+                 all_features=['ra_true', 'dec_true', 'u', 'g', 'r', 'i', 'z', 'y'], 
+                 pos_features=['ra_true', 'dec_true']):
+        """Transform class for computing metadata based on transformed X
+
+        Parameters
+        ----------
+        all_features : list, optional
+            All the existing features, including position features.
+            Warning: must be the list after slicing!
+        pos_features : list, optional
+            Euclidean-ized position features to compute metadata with.
+            Warning: must be included in all_features!
+            
+        """
+        self.pos_idx = get_idx(all_features, pos_features)
+    def __call__(self, x_meta, x):
+        # Note: x_meta argument is unused.
+        n_nodes = x.shape[0]
+        dist = torch.sum(x[:, self.pos_idx]**2.0, axis=1)**0.5  # [n_nodes,]
+        x_meta = torch.FloatTensor([[n_nodes, torch.sum(1.0/(dist + 1.e-5))]]).to(x.device)
+        # Return x as second in tuple to maintain consistency
+        return x_meta, x
+
+
 class Standardizer:
     def __init__(self, mean, std):
         self.mean = mean
         self.std = std
 
-    def __call__(self, x):
+    def __call__(self, x, y=None):
+        # Second dummy argument exists for x_meta
         return (x - self.mean) / self.std
 
 

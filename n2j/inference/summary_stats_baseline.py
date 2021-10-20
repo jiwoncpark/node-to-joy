@@ -225,7 +225,7 @@ class Matcher:
                 except:
                     print("Summary stat: ", s)
                     print("Thresholds: ", thresholds[s])
-                    print("Optimal criterion: ", optimal_crit)
+                    print("Matches: ", optimal_crit)
                     raise ValueError("Can't find the optimal threshold!")
                 # Record whether each row was "optimal"
                 # There's only one optimal row for a given ss_name
