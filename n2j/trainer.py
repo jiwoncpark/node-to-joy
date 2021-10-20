@@ -304,7 +304,7 @@ class Trainer:
             #if nan_detected:
             #    continue  # next batch
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.net_out_global.parameters(), 0.01)
+            # torch.nn.utils.clip_grad_norm_(self.model.net_out_global.parameters(), 0.01)
             self.optimizer.step()
             train_loss += (loss.detach().cpu().item() - train_loss)/(1.0+i)
             self.logger.add_scalar('metrics/iter_loss', loss.detach().cpu().item(),
