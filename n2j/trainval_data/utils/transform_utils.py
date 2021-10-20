@@ -63,6 +63,7 @@ class Metadata:
             
         """
         self.pos_idx = get_idx(all_features, pos_features)
+        
     def __call__(self, x_meta, x):
         # Note: x_meta argument is unused.
         n_nodes = x.shape[0]
@@ -79,7 +80,10 @@ class Standardizer:
 
     def __call__(self, x, y=None):
         # Second dummy argument exists for x_meta
-        return (x - self.mean) / self.std
+        if y is None:
+            return (x - self.mean)/self.std
+        else:
+            return (x - self.mean)/self.std, y
 
 
 class Slicer:
