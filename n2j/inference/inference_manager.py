@@ -18,6 +18,7 @@ import n2j.inference.infer_utils as iutils
 import matplotlib.pyplot as plt
 import corner
 from n2j.trainval_data.utils.transform_utils import (ComposeXYLocal,
+                                                     Metadata,
                                                      Standardizer,
                                                      Slicer,
                                                      MagErrorSimulatorTorch,
