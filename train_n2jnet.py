@@ -13,7 +13,8 @@ if __name__ == '__main__':
     trainer = Trainer(**cfg['trainer'])
     norm_obj = getattr(stats, cfg['data']['train_dist_name'])(**cfg['data']['train_dist_kwargs'])
     train_raytracing = [os.path.join(cfg['data']['in_dir'],
-                                     f'cosmodc2_{hp}/Y_{hp}') for hp in cfg['data']['train_hp']]
+                                     f'cosmodc2_{hp}', 
+                                     f'Y_{hp}') for hp in cfg['data']['train_hp']]
     trainer.load_dataset(dict(features=cfg['data']['features'],
                               raytracing_out_dirs=train_raytracing,
                               healpixes=cfg['data']['train_hp'],
