@@ -298,7 +298,7 @@ class CosmoDC2GraphHealpix(BaseGraph):
         self.mag_lower = -np.inf  # lower magnitude cut, excludes stars
         # LSST gold sample i-band mag (Gorecki et al 2014) = 25.3
         # LSST 10-year coadded 5-sigma depth = 26.8
-        self.mag_upper = 26.8  # upper magnitude cut, excludes small halos
+        self.mag_upper = 25.3 # 26.8  # upper magnitude cut, excludes small halos
         # Store output in <root>/processed for processed_dir
         # Read input from in_dir/cosmodc2_{healpix}/raw
         root = osp.join(self.out_dir, f'cosmodc2_{self.healpix}')
