@@ -41,8 +41,8 @@ def get_inv_dist_number_counts(x, batch_indices, pos_indices):
         List of the two indices corresponding to ra, dec in x
 
     """
-    inv_dist = torch.sum(x[:, pos_indices]**2.0, dim=1)**0.5  # [n_nodes,]
-    weights = 1.0/torch.maximum(inv_dist, torch.ones_like(inv_dist)*1.e-5)
+    dist = torch.sum(x[:, pos_indices]**2.0, dim=1)**0.5  # [n_nodes,]
+    weights = 1.0/(dist + 1.e-5)
     weighted_N = scatter_add(weights, batch_indices)
     return weighted_N.numpy()
 
