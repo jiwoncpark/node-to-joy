@@ -45,11 +45,12 @@ class TestSummaryStats(unittest.TestCase):
         actual = ssb.get_inv_dist_number_counts(torch.from_numpy(x),
                                                torch.from_numpy(batch_indices),
                                                ra_dec_idx)
-        dist = np.array([5, 1.e-5, 29, 13, 17, 25])
+        dist = np.array([5, np.sqrt(2)*1.e-7 + 1.e-5, 29, 13, 17, 25])
         expected = np.array([sum(1.0/dist[:3]),
                              sum(1.0/dist[3:4]),
                              sum(1.0/dist[4:])])
-        np.testing.assert_array_equal(actual, expected)
+        np.testing.assert_array_almost_equal(actual, expected,
+                                             decimal=4)
 
     def test_update(self):
         """Test `update` method
@@ -71,14 +72,15 @@ class TestSummaryStats(unittest.TestCase):
             ss_obj.update(b, i)
         # Compute expected
         expected_N = [3, 1, 2]
-        dist = np.array([5, 1.e-5, 29, 13, 17, 25])
+        dist = np.array([5, np.sqrt(2)*1.e-7 + 1.e-5, 29, 13, 17, 25])
         expected_N_inv_dist = np.array([sum(1.0/dist[:3]),
                                         sum(1.0/dist[3:4]),
                                         sum(1.0/dist[4:])])
         np.testing.assert_array_equal(ss_obj.stats['N'],
                                       expected_N)
-        np.testing.assert_array_equal(ss_obj.stats['N_inv_dist'],
-                                      expected_N_inv_dist)
+        np.testing.assert_array_almost_equal(ss_obj.stats['N_inv_dist'],
+                                             expected_N_inv_dist,
+                                             decimal=4)
 
     def test_set_stats_export_stats(self):
         """Test `set_stats` method
