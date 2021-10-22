@@ -73,6 +73,7 @@ class CosmoDC2Graph(ConcatDataset):
         datasets = []
         Y_list = []
         for i in range(self.n_datasets):
+            print(f"Appending healpix {healpixes[i]}")
             graph_hp = CosmoDC2GraphHealpix(healpixes[i],
                                             in_dir,
                                             raytracing_out_dirs[i],
@@ -83,8 +84,8 @@ class CosmoDC2Graph(ConcatDataset):
                                             out_dir=out_dir
                                             )
             datasets.append(graph_hp)
-            Y_list.append(graph_hp.Y)
-        self.Y = pd.concat(Y_list, ignore_index=True).reset_index(drop=True)
+            #Y_list.append(graph_hp.Y)
+        #self.Y = pd.concat(Y_list, ignore_index=True).reset_index(drop=True)
         ConcatDataset.__init__(self, datasets)
         self.transform_X_Y_local = None
         self.transform_Y = None

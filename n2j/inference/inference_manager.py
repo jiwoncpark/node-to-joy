@@ -95,17 +95,21 @@ class InferenceManager:
         target_local = ['halo_mass', 'stellar_mass', 'redshift']
         self.sub_target_local = sub_target_local if sub_target_local else target_local
         self.Y_local_dim = len(self.sub_target_local)
+        print("Instantiating CosmoDC2Graph...")
+        print(data_kwargs)
         dataset = CosmoDC2Graph(num_workers=self.num_workers, **data_kwargs)
         ############
         # Training #
         ############
         if is_train:
             self.train_dataset = dataset
+            print("Reading train stats...")
             if osp.exists(osp.join(self.checkpoint_dir, 'stats.pt')):
                 stats = torch.load(osp.join(self.checkpoint_dir, 'stats.pt'))
             else:
                 stats = self.train_dataset.data_stats
                 torch.save(stats, osp.join(self.checkpoint_dir, 'stats.pt'))
+            print("Configuring transforms...")
             # Transforming X
             idx = get_idx(features, self.sub_features)
             self.X_mean = stats['X_mean'][:, idx]
@@ -146,6 +150,7 @@ class InferenceManager:
             self.train_dataset.transform_Y = self.transform_Y
             # Loading option 1: Subsample from a distribution
             if data_kwargs['subsample_pdf_func'] is not None:
+                print("Configuring subsampling...")
                 self.class_weight = None
                 train_subset = torch.utils.data.Subset(self.train_dataset,
                                                        stats['subsample_idx'])
