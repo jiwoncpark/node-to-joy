@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # Labels (Y) #
     ##############
     # Explicitly sample kappas for ~1000 sightlines first (slow)
-    if True:
+    if False:
         kappa_sampler = CosmoDC2Raytracer(in_dir=IN_DIR,
                                           out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v03/kappa_sampling',
                                           fov=1.35,  # diameter
