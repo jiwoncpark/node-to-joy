@@ -54,6 +54,7 @@ if __name__ == '__main__':
                            sub_target_local=cfg['data']['sub_target_local'],
                            is_train=False,
                            batch_size=cfg['test_data']['batch_size'],
+                           rebin=False,
                            noise_kwargs=cfg['data']['noise_kwargs'],
                            detection_kwargs=cfg['data'].get('detection_kwargs', {}),
                            )
