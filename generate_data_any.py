@@ -3,6 +3,7 @@
 """
 import os
 import argparse
+import shutil
 from scipy import stats
 from n2j.trainval_data.raytracers.cosmodc2_raytracer import CosmoDC2Raytracer
 from n2j.trainer import Trainer
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     # Explicitly sample kappas for ~1000 sightlines first (slow)
     if False:
         kappa_sampler = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                          out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v03/kappa_sampling',
+                                          out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v04/kappa_sampling',
                                           fov=1.35,  # diameter
                                           healpix=10450,
                                           n_sightlines=1000,  # keep this small
@@ -42,14 +43,14 @@ if __name__ == '__main__':
     for hp in TRAIN_HP:
         print(f"Raytracing for healpix {hp}...")
         train_Y_generator = CosmoDC2Raytracer(in_dir=IN_DIR,
-                                              out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v03/cosmodc2_{hp}/Y_{hp}',
+                                              out_dir=f'/global/cscratch1/sd/jwp/n2j/data_v04/cosmodc2_{hp}/Y_{hp}',
                                               fov=1.35,
                                               healpix=hp,
                                               n_sightlines=N_TRAIN,  # many more LOS
                                               mass_cut=11.0,
                                               n_kappa_samples=0,
                                               seed=hp,
-                                              kappa_sampling_dir=f'/global/cscratch1/sd/jwp/n2j/data_v03/kappa_sampling')  # no sampling
+                                              kappa_sampling_dir=f'/global/cscratch1/sd/jwp/n2j/data_v04/kappa_sampling')  # no sampling
         train_Y_generator.parallel_raytrace(n_cores=200)
         train_Y_generator.apply_calibration()
 
@@ -74,7 +75,7 @@ if __name__ == '__main__':
     trainer = Trainer('cuda', checkpoint_dir=CHECKPOINT_DIR, seed=1028)
     norm_obj = getattr(stats, 'norm')(loc=0.01, scale=0.04)
     trainer.load_dataset(dict(features=features,
-                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data_v03/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
+                              raytracing_out_dirs=[f'/global/cscratch1/sd/jwp/n2j/data_v04/cosmodc2_{hp}/Y_{hp}' for hp in TRAIN_HP],
                               healpixes=TRAIN_HP,
                               n_data=[N_TRAIN]*len(TRAIN_HP),
                               aperture_size=1.0,  # radius
@@ -82,7 +83,7 @@ if __name__ == '__main__':
                               n_subsample=2000,
                               stop_mean_std_early=False,
                               in_dir=IN_DIR,
-                              out_dir='/global/cscratch1/sd/jwp/n2j/data_v03',
+                              out_dir='/global/cscratch1/sd/jwp/n2j/data_v04',
                               n_cores=200),
                          sub_features=sub_features,
                          sub_target=SUB_TARGET,
