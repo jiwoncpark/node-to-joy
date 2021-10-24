@@ -290,7 +290,7 @@ class GlobalModel(Module):
         if self.weight_sum:
             alpha = self.node_alpha(out)  # [n_nodes, 1]
             alpha = F.softmax(alpha, dim=0)  # [n_nodes, 1] the weights
-            #alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+            alpha = F.dropout(alpha, p=self.dropout, training=self.training)
             out = scatter_add(out*alpha, batch, dim=0)  # [batch_size, dim_pre_aggr]
         else:
             out = scatter_add(out, batch, dim=0)  # [batch_size, dim_pre_aggr]

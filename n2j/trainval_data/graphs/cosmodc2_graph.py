@@ -150,7 +150,7 @@ class CosmoDC2Graph(ConcatDataset):
             p = subsample_weight/kde.pdf(y_values_orig)
             p /= np.sum(p)
             subsample_idx = rng.choice(np.arange(len(y_values_orig)),
-                                       p=p, replace=True,
+                                       p=p, replace=self.replace,
                                        size=self.n_subsample)
             subsample_idx = subsample_idx.tolist()
             sampler = SubsetRandomSampler(subsample_idx)
