@@ -410,19 +410,21 @@ class InferenceManager:
         """
         # Decide which dataset we're collecting kappa labels for
         if is_train:
-            loader = self.train_loader
             path = self.true_train_kappa_path
-            n_data = len(self.train_dataset)
             ss_path = self.train_summary_stats_path
         else:
-            loader = self.test_loader
             path = self.true_test_kappa_path
-            n_data = self.n_test
             ss_path = self.test_summary_stats_path
         if osp.exists(path):
             if compute_summary and osp.exists(ss_path):
                 true_kappa = np.load(path)
                 return true_kappa
+        if is_train:
+            n_data = len(self.train_dataset)
+            loader = self.train_loader
+        else:
+            n_data = self.n_test
+            loader = self.test_loader
         print(f"Saving {path}...")
         # Fetch precomputed Y_mean, Y_std to de-standardize samples
         Y_mean = self.Y_mean.to(self.device)
