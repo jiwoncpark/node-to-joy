@@ -283,6 +283,7 @@ class GlobalModel(Module):
         if self.weight_sum:
             self.node_alpha = Seq(Lin(self.dim_pre_aggr, 1),  # fix n_heads = 1
                                   LeakyReLU(negative_slope=0.01))
+            self.dropout_weights = MCDropout(self.dropout)
 
     def forward(self, x, u, batch):
         out = torch.cat([x, u[batch]], dim=-1)  # [n_nodes, dim_local + dim_global]
@@ -290,7 +291,7 @@ class GlobalModel(Module):
         if self.weight_sum:
             alpha = self.node_alpha(out)  # [n_nodes, 1]
             alpha = F.softmax(alpha, dim=0)  # [n_nodes, 1] the weights
-            alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+            alpha = self.dropout_weights(alpha)
             out = scatter_add(out*alpha, batch, dim=0)  # [batch_size, dim_pre_aggr]
         else:
             out = scatter_add(out, batch, dim=0)  # [batch_size, dim_pre_aggr]
