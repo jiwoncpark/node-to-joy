@@ -76,6 +76,6 @@ if __name__ == '__main__':
     def get_lr(gamma, optimizer):
         return [group['lr'] * gamma for group in optimizer.param_groups]
     #for param_group, lr in zip(trainer.optimizer.param_groups,
-    #                           get_lr(0.2, trainer.optimizer)):
+    #                           get_lr(0.5, trainer.optimizer)):
     #    param_group['lr'] = lr
     trainer.train(n_epochs=cfg['n_epochs'])
