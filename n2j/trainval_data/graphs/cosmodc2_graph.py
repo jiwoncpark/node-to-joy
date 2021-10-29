@@ -30,7 +30,7 @@ class CosmoDC2Graph(ConcatDataset):
                  n_data, features, subsample_pdf_func=None,
                  n_subsample=None, subsample_with_replacement=True,
                  stop_mean_std_early=False, n_cores=20, num_workers=4,
-                 out_dir=None):
+                 out_dir=None, seed=123):
         """Summary
 
         Parameters
@@ -62,6 +62,7 @@ class CosmoDC2Graph(ConcatDataset):
         self.n_cores = n_cores
         self.num_workers = num_workers
         self.subsample_pdf_func = subsample_pdf_func
+        self.seed = seed
         if out_dir is None:
             out_dir = in_dir
         else:
@@ -209,7 +210,7 @@ class CosmoDC2Graph(ConcatDataset):
             y_values_orig[i*B:(i+1)*B] = k_batch
             # Compute subsampling weights
             subsample_weight[i*B:(i+1)*B] = self.subsample_pdf_func(k_batch)
-        rng = np.random.default_rng(456)
+        rng = np.random.default_rng(self.seed)
         kde = scipy.stats.gaussian_kde(y_values_orig, bw_method='scott')
         p = subsample_weight/kde.pdf(y_values_orig)
         p /= np.sum(p)
