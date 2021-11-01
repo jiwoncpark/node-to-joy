@@ -156,7 +156,7 @@ class Matcher:
                                          'med',
                                          'plus_1sig',
                                          'minus_1sig',
-                                         'logp'
+                                         'logp',
                                          'mad',
                                          'mae',
                                          'is_optimal'])
