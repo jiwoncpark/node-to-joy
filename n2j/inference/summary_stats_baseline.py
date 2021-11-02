@@ -191,7 +191,9 @@ class Matcher:
                                                                          n_resamples=10000,
                                                                          plot_path=None)
                             except ValueError:
+                                print(f"Sightline {i}")
                                 print("Accepted samples were of shape", accepted.shape)
+                                print("Threshold was", t)
                             resamples = resamples.squeeze()  # [n_resamples]
                             np.save(osp.join(self.out_dir,
                                              f'matched_resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
