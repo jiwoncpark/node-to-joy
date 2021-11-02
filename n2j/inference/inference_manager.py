@@ -716,6 +716,7 @@ class InferenceManager:
         return log_weights_grid
 
     def get_reweighted_bnn_kappa(self, n_resamples, grid_kappa_kwargs,
+                                 k_max=None,
                                  ):
         """Get the reweighted BNN kappa samples, reweighted either on a
         grid or per sample
@@ -754,9 +755,15 @@ class InferenceManager:
             k_reweighted_grid[idx, 0, :] = per_grid
             # Per sample
             log_p_sample = self.get_kappa_log_weights(idx, **grid_kappa_kwargs)
+            k_bnn_i = k_bnn[idx]
+            probs_i = np.exp(log_p_sample)
+            if k_max is not None:
+                mask = k_bnn_i < k_max
+                k_bnn_i = k_bnn_i[mask]
+                probs_i = probs_i[mask]
             plot_path = osp.join(self.reweighted_per_sample_dir, f'kde_{idx}.png')
-            per_sample = iutils.resample_from_samples(k_bnn[idx],
-                                                      np.exp(log_p_sample),
+            per_sample = iutils.resample_from_samples(k_bnn_i,
+                                                      probs_i,
                                                       n_resamples,
                                                       plot_path)
             k_reweighted_per_sample[idx, 0, :] = per_sample

@@ -127,6 +127,6 @@ if __name__ == '__main__':
                          interim_pdf_func=norm_obj.pdf,
                          )
     # Use the per-sample reweighted samples for calibration plot
-    k_bnn_analytic, k_bnn = infer_obj.get_reweighted_bnn_kappa(20000, grid_k_kwargs)
+    k_bnn_analytic, k_bnn = infer_obj.get_reweighted_bnn_kappa(20000, grid_k_kwargs, k_max=0.01+5*0.04)
     infer_obj.get_calibration_plot(k_bnn_analytic)
     infer_obj.compute_metrics()
