@@ -48,7 +48,8 @@ if __name__ == '__main__':
                                 aperture_size=1.0,
                                 subsample_pdf_func=norm_obj_test.pdf,
                                 n_subsample=cfg['test_data']['n_subsample_test'],
-                                in_dir=cfg['data']['in_dir']),
+                                in_dir=cfg['data']['in_dir'],
+                                seed=cfg['test_data']['seed']),
                            sub_features=cfg['data']['sub_features'],
                            sub_target=cfg['data']['sub_target'],
                            sub_target_local=cfg['data']['sub_target_local'],
@@ -126,6 +127,6 @@ if __name__ == '__main__':
                          interim_pdf_func=norm_obj.pdf,
                          )
     # Use the per-sample reweighted samples for calibration plot
-    k_bnn_analytic, k_bnn = infer_obj.get_reweighted_bnn_kappa(10000, grid_k_kwargs)
+    k_bnn_analytic, k_bnn = infer_obj.get_reweighted_bnn_kappa(20000, grid_k_kwargs)
     infer_obj.get_calibration_plot(k_bnn_analytic)
     infer_obj.compute_metrics()
