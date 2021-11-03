@@ -755,8 +755,8 @@ class InferenceManager:
             k_reweighted_grid[idx, 0, :] = per_grid
             # Per sample
             log_p_sample = self.get_kappa_log_weights(idx, **grid_kappa_kwargs)
-            k_bnn_i = k_bnn[idx]
-            probs_i = np.exp(log_p_sample)
+            k_bnn_i = k_bnn[idx].squeeze()  # [n_total_samples,]
+            probs_i = np.exp(log_p_sample)  # [n_total_samples,]
             if k_max is not None:
                 mask = k_bnn_i < k_max
                 k_bnn_i = k_bnn_i[mask]
