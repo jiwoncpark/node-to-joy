@@ -225,6 +225,7 @@ class Matcher:
                                                        optimal_crit,
                                                        min_matches=min_matches)
                 except:
+                    print("Test x:", test_x)
                     print("Summary stat: ", s)
                     print("Thresholds: ", thresholds[s])
                     print("Matches: ", optimal_crit)
@@ -289,7 +290,10 @@ def get_optimal_threshold(thresholds, n_matches, min_matches=1000):
     n_matches = np.array(n_matches)
     # Impossible for thresholds with n_matches < min_matches to be selected
     thresholds[n_matches < min_matches] = np.nan  # hacky
-    i = np.nanargmin(thresholds)
+    if np.isnan(thresholds).all():
+        raise ValueError("No threshold with sufficient matches.")
+    else:
+        i = np.nanargmin(thresholds)
     is_optimal[i] = True
     return is_optimal
 
