@@ -849,13 +849,24 @@ class InferenceManager:
     def post_reweighting_metrics(self):
         return pd.read_csv(self.post_reweighting_metrics_path,
                            index_col=False)
+    
+    @property
+    def post_reweighting_metrics_grid_path(self):
+        return osp.join(self.out_dir, 'post_metrics_grid.csv')
 
+    @property
+    def post_reweighting_metrics_grid(self):
+        return pd.read_csv(self.post_reweighting_metrics_grid_path,
+                           index_col=False)
+    
     def compute_metrics(self):
         """Evaluate metrics for model selection, based on per-sample
         reweighting for fair comparison to summary stats metrics
+        
+        # TODO: move to separate helper module for pre, post, post-grid
 
         """
-        columns = ['minus_sig', 'med', 'plus_sig']
+        columns = ['minus_1sig', 'med', 'plus_1sig']
         columns += ['log_p', 'mad', 'mae']
         # mae = median absolute errors, robust measure of accuracy
         # mad = median absolute deviation, robust measure of precision
@@ -863,8 +874,9 @@ class InferenceManager:
         k_bnn_pre = self.get_bnn_kappa()
         pre_metrics = pd.DataFrame(columns=columns)
         # Metrics on post-reweighting BNN posteriors
-        _, k_bnn_post = self.get_reweighted_bnn_kappa(None, None)
+        k_bnn_post_grid, k_bnn_post = self.get_reweighted_bnn_kappa(None, None)
         post_metrics = pd.DataFrame(columns=columns)
+        post_metrics_grid = pd.DataFrame(columns=columns)
         # True kappa
         k_test = self.get_true_kappa(is_train=False).squeeze()
         n_test = len(k_test)
@@ -872,39 +884,55 @@ class InferenceManager:
             # Init rows to append
             pre_stats = dict()
             post_stats = dict()
+            post_stats_grid = dict()
             # Slice samples for this sightline
             pre_samples = k_bnn_pre[i, 0, :]
             post_samples = k_bnn_post[i, 0, :]
+            post_samples_grid = k_bnn_post_grid[i, 0, :]
             # Evaluate log p at truth, using KDE fit on samples
             # with and without 1/prior weights
             true_k = k_test[i]
             log_w = self.get_kappa_log_weights(i)  # per-sample log weights
+            grid, log_w_grid = self.get_kappa_log_weights_grid(i)  # grid log weights
             pre_kde = iutils.fit_kde_on_weighted_samples(pre_samples)
             post_kde = iutils.fit_kde_on_weighted_samples(pre_samples,
                                                           np.exp(log_w))
+            post_kde_grid = iutils.fit_kde_on_weighted_samples(grid,
+                                                               np.exp(log_w_grid))
             pre_log_p = pre_kde.logpdf(true_k).item()
             post_log_p = post_kde.logpdf(true_k).item()
+            post_log_p_grid = post_kde_grid.logpdf(true_k).item()
             pre_stats.update(log_p=pre_log_p)
             post_stats.update(log_p=post_log_p)
+            post_stats_grid.update(log_p=post_log_p_grid)
             # Compute descriptive stats
             lower, med, upper = np.quantile(pre_samples,
                                             [0.5-0.34, 0.5, 0.5+0.34])
-            pre_stats.update(minus_sig=med - lower,
+            pre_stats.update(minus_1sig=med - lower,
                              med=med,
-                             plus_sig=upper - med,
+                             plus_1sig=upper - med,
                              mae=np.median(np.abs(pre_samples - true_k)),
                              mad=scipy.stats.median_abs_deviation(pre_samples))
             lower, med, upper = np.quantile(post_samples,
                                             [0.5-0.34, 0.5, 0.5+0.34])
-            post_stats.update(minus_sig=med - lower,
+            post_stats.update(minus_1sig=med - lower,
                               med=med,
-                              plus_sig=upper - med,
+                              plus_1sig=upper - med,
                               mae=np.median(np.abs(post_samples - true_k)),
                               mad=scipy.stats.median_abs_deviation(post_samples))
+            lower, med, upper = np.quantile(post_samples_grid,
+                                            [0.5-0.34, 0.5, 0.5+0.34])
+            post_stats_grid.update(minus_1sig=med - lower,
+                                   med=med,
+                                   plus_1sig=upper - med,
+                                   mae=np.median(np.abs(post_samples_grid - true_k)),
+                                   mad=scipy.stats.median_abs_deviation(post_samples_grid))
             pre_metrics = pre_metrics.append(pre_stats,
                                              ignore_index=True)
             post_metrics = post_metrics.append(post_stats,
                                                ignore_index=True)
+            post_metrics_grid = post_metrics_grid.append(post_stats_grid,
+                                                         ignore_index=True)
         # Evaluate average metrics over entire test set
         pre_metrics = pre_metrics.append(pre_metrics.mean(),
                                          ignore_index=True)
@@ -914,11 +942,17 @@ class InferenceManager:
                                            ignore_index=True)
         post_metrics = post_metrics.append(post_metrics.median(),
                                            ignore_index=True)
+        post_metrics_grid = post_metrics_grid.append(post_metrics_grid.mean(),
+                                                     ignore_index=True)
+        post_metrics_grid = post_metrics_grid.append(post_metrics_grid.median(),
+                                                     ignore_index=True)
         # Save as CSV
         pre_metrics.to_csv(self.pre_reweighting_metrics_path,
                            index=False)
         post_metrics.to_csv(self.post_reweighting_metrics_path,
                             index=False)
+        post_metrics_grid.to_csv(self.post_reweighting_metrics_grid_path,
+                                 index=False)
 
     def get_calibration_plot(self, k_bnn):
         """Plot calibration (should be run on the validation set)
