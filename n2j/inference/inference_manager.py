@@ -820,7 +820,7 @@ class InferenceManager:
                              corner_kwargs, log_idx=None):
         # MCMC samples ~ [n_omega, 2]
         omega_post_samples = self.get_omega_samples(chain_path, chain_kwargs, 
-                                                    log_idx=log_idxs)
+                                                    log_idx=log_idx)
         print(f"Plotting {omega_post_samples.shape[0]} samples...")
         fig = corner.corner(omega_post_samples,
                             **corner_kwargs)
