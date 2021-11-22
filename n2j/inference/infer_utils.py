@@ -3,6 +3,8 @@
 """
 
 import os
+import sys
+import warnings
 from functools import partial
 from multiprocessing import Pool, cpu_count
 import numpy as np
@@ -232,6 +234,12 @@ def get_omega_post_loop(k_samples_list, log_p_k_given_omega_int_list,
         print("n_test")
         print(len(k_samples_list), len(log_p_k_given_omega_int_list))
         print(len(log_p_k_given_omega_func_list))
+        print("n_samples of first sightline")
+        print(len(k_samples_list[0]), len(log_p_k_given_omega_int_list[0]))
+    if DEBUG:
+        np.save('func_list_num', log_p_k_given_omega_func_list)
+        np.save('arr_list_denom', log_p_k_given_omega_int_list)
+        
     run_mcmc(log_prob_mcmc_loop, **mcmc_kwargs)
 
 
@@ -296,11 +304,37 @@ def log_prob_mcmc_loop(omega, log_p_k_given_omega_func_list,
         log_p_k_given_omega = log_p_k_given_omega_func_list[los_i](omega[0], omega[1])
         log_ratio = log_p_k_given_omega - log_p_k_given_omega_int_list[los_i]  # [n_samples]
         # print(len(log_ratio), len(log_p_k_given_omega), len(log_p_k_given_omega_int_list[los_i]))
+        
         mean_over_samples = special.logsumexp(log_ratio,
                                               # normalization
                                               b=1.0/len(log_ratio))  # scalar
+        if DEBUG:
+            if np.sum(~np.isfinite(log_ratio)) > 0:
+                print("has nan in log_ratio")
+                print("number of nans: ", np.sum(~np.isfinite(log_ratio)))
+                print("los:", los_i)
+                print("omega:", omega)
+                print("num:", log_p_k_given_omega)
+                print("denom:", log_p_k_given_omega_int_list[los_i])
+            if np.isnan(mean_over_samples):
+                print("NaN mean over samples")
+                print("los:", los_i)
+                print("omega:", omega)
+                print("num:", log_p_k_given_omega)
+                print("denom:", log_p_k_given_omega_int_list[los_i])
         mean_over_samples_dataset[los_i] = mean_over_samples
-    good = mean_over_samples_dataset[np.isfinite(mean_over_samples_dataset)]
+    is_finite = np.isfinite(mean_over_samples_dataset)
+    n_eff_samples = np.sum(is_finite)
+    good = mean_over_samples_dataset[is_finite]
+    if n_eff_samples < n_test:
+        return -np.inf
+        #if n_eff_samples == 0:
+        #    # Happens when proposed omega is out of bounds, 
+        #    # i.e. numerator `log_p_k_given_omega` is -np.inf, a scalar
+        #    return -np.inf
+        #else:
+        #    if DEBUG:
+        #        warnings.warn(f"Effective samples {n_eff_samples} less than total")
     # assert not np.isnan(mean_over_samples_dataset).any()
     # assert not np.isinf(mean_over_samples_dataset).any()
     log_prob = good.sum()  # summed over sightlines
