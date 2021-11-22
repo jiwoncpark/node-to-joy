@@ -631,8 +631,8 @@ class InferenceManager:
             samples_orig_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
                                                       threshold=None)
             # Fit Gaussian on matched posterior samples
-            norm_i = scipy.stats.norm(loc=np.median(samples_i), 
-                                scale=scipy.stats.median_abs_deviation(samples_i))
+            norm_i = scipy.stats.norm(loc=np.median(samples_orig_i), 
+                                scale=scipy.stats.median_abs_deviation(samples_orig_i))
             rng = np.random.RandomState(i)
             samples_i = norm_i.rvs(20000, random_state=rng)
             log_p_i = self.get_log_p_k_given_omega_int_per_los(i, samples_i, interim_pdf_func,
