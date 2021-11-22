@@ -93,8 +93,8 @@ if __name__ == '__main__':
                                           n_mc_dropout=20,
                                           mcmc_kwargs=mcmc_kwargs,
                                           interim_pdf_func=norm_obj.pdf,
-                                          bounds_lower=np.array([-0.5, -6]),
-                                          bounds_upper=np.array([1.5, 0]),
+                                          bounds_lower=np.array([-0.5, -7]),
+                                          bounds_upper=np.array([0.5, 0]),
                                           )
         # MCMC over unweighted N summary stats
         mcmc_kwargs_N = dict(p0=p0,
@@ -105,8 +105,8 @@ if __name__ == '__main__':
         infer_obj.run_mcmc_for_omega_post_summary_stats('N',
                                                         mcmc_kwargs=mcmc_kwargs_N,
                                                         interim_pdf_func=norm_obj.pdf,
-                                                        bounds_lower=np.array([-0.5, -6]),
-                                                        bounds_upper=np.array([1.5, 0])
+                                                        bounds_lower=np.array([-0.5, -7]),
+                                                        bounds_upper=np.array([0.5, 0]),
                                                         )
         # MCMC over inv-dist N summary stats
         mcmc_kwargs_N_inv_dist = dict(p0=p0,
@@ -117,8 +117,8 @@ if __name__ == '__main__':
         infer_obj.run_mcmc_for_omega_post_summary_stats('N_inv_dist',
                                                         mcmc_kwargs=mcmc_kwargs_N_inv_dist,
                                                         interim_pdf_func=norm_obj.pdf,
-                                                        bounds_lower=np.array([-0.5, -6]),
-                                                        bounds_upper=np.array([1.5, 0])
+                                                        bounds_lower=np.array([-0.5, -7]),
+                                                        bounds_upper=np.array([0.5, 0]),
                                                         )
 
     grid_k_kwargs = dict(grid=np.linspace(-0.2, 0.2, 1000),
