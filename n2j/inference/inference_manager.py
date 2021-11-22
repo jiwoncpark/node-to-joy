@@ -451,7 +451,8 @@ class InferenceManager:
         return true_kappa
 
     def get_summary_stats(self, thresholds, interim_pdf_func=None,
-                          match=True, min_matches=1000):
+                          match=True, min_matches=1000,
+                          k_max=np.inf):
         """Save accepted samples from summary statistics matching
 
         Parameters
@@ -479,7 +480,8 @@ class InferenceManager:
                                    test_k)
         if match:
             self.matcher.match_summary_stats(thresholds, interim_pdf_func,
-                                             min_matches=min_matches)
+                                             min_matches=min_matches,
+                                             k_max=k_max)
         overview = self.matcher.get_overview_table()
         return overview
 
@@ -504,17 +506,17 @@ class InferenceManager:
         """
         if osp.exists(self.log_p_k_given_omega_int_path):
             return np.load(self.log_p_k_given_omega_int_path)
-        k_train = self.get_true_kappa(is_train=True).squeeze(1)
+        # k_train = self.get_true_kappa(is_train=True).squeeze(1)
         k_bnn = self.get_bnn_kappa(n_samples=n_samples,
                                    n_mc_dropout=n_mc_dropout).squeeze(1)
-        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=k_train,
+        log_p_k_given_omega_int = iutils.get_log_p_k_given_omega_int_analytic(k_train=None, #k_train,
                                                                               k_bnn=k_bnn,
                                                                               interim_pdf_func=interim_pdf_func)
         np.save(self.log_p_k_given_omega_int_path, log_p_k_given_omega_int)
         return log_p_k_given_omega_int
 
     def get_log_p_k_given_omega_int_loop(self, interim_pdf_func, bnn=False,
-                                         ss_name='N'):
+                                         ss_name='N', k_max=np.inf):
         """Compute log(p_k|Omega_int) for BNN or summary stats samples p_k.
         Useful when the number of samples differs across sightlines, so
         the computation is not trivially vectorizable.
@@ -534,20 +536,48 @@ class InferenceManager:
         if bnn:
             raise NotImplementedError("Use the vectorized version for BNN!")
         path = osp.join(self.matching_dir,
-                        f'log_p_k_given_omega_int_{sample_type}_list.npy')
+                        f'log_p_k_given_omega_int_{ss_name}_list.npy')
         if osp.exists(path):
-            return np.load(path)
+            return np.load(path, allow_pickle=True)
         log_p_k_given_omega_int_list = []
         for i in range(self.n_test):
             samples_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
                                                  threshold=None)
+            samples_i = samples_i[samples_i < k_max]
             samples_i = samples_i.reshape([1, -1])  # artificial n_test of 1
+            # TODO: use get_log_p_k_given_omega_int_per_los
             log_p_i = iutils.get_log_p_k_given_omega_int_analytic(k_train=None,
                                                                   k_bnn=samples_i,
                                                                   interim_pdf_func=interim_pdf_func)
             # log_p_i ~ [1, len(samples_i)] so squeeze
             log_p_k_given_omega_int_list.append(log_p_i.squeeze())
+        np.save(path, log_p_k_given_omega_int_list, allow_pickle=True)
         return log_p_k_given_omega_int_list
+    
+    def get_log_p_k_given_omega_int_per_los(self, i, samples_i, interim_pdf_func,
+                                            ss_name='N'):
+        """Compute log(p_k|Omega_int) for BNN or summary stats samples p_k.
+        Useful when the number of samples differs across sightlines, so
+        the computation is not trivially vectorizable.
+
+        Parameters
+        ----------
+        i : int
+            ID of sightline
+        samples_i : np.ndarray
+            Matched posterior samples for this sightline
+        interim_pdf_func : callable
+            Function that evaluates the PDF of the interim prior
+        ss_name : str, optional
+            Summary stats name. Only used if `bnn` is False.
+            Default: 'N'
+        """
+        samples_i = samples_i.reshape([1, -1])  # artificial n_test of 1
+        log_p_i = iutils.get_log_p_k_given_omega_int_analytic(k_train=None,
+                                                              k_bnn=samples_i,
+                                                              interim_pdf_func=interim_pdf_func)
+        return log_p_i.squeeze()  # log_p_i ~ [1, len(samples_i)] so squeeze
+        
 
     def run_mcmc_for_omega_post(self, n_samples, n_mc_dropout,
                                 mcmc_kwargs, interim_pdf_func,
@@ -595,14 +625,19 @@ class InferenceManager:
         bounds_upper : np.ndarray or float, optional
             Upper bound for target quantities
         """
-
-        log_p_k_given_omega_int_list = self.get_log_p_k_given_omega_int_loop(interim_pdf_func,
-                                                                             bnn=False,
-                                                                             ss_name=ss_name)
+        log_p_k_given_omega_int_list = []
         samples = []
         for i in range(self.n_test):
-            samples_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
-                                                 threshold=None)
+            samples_orig_i = self.matcher.get_samples(idx=i, ss_name=ss_name,
+                                                      threshold=None)
+            # Fit Gaussian on matched posterior samples
+            norm_i = scipy.stats.norm(loc=np.median(samples_i), 
+                                scale=scipy.stats.median_abs_deviation(samples_i))
+            rng = np.random.RandomState(i)
+            samples_i = norm_i.rvs(20000, random_state=rng)
+            log_p_i = self.get_log_p_k_given_omega_int_per_los(i, samples_i, interim_pdf_func,
+                                                               ss_name='N')
+            log_p_k_given_omega_int_list.append(log_p_i)
             samples.append(samples_i)
         iutils.get_omega_post_loop(samples, log_p_k_given_omega_int_list, mcmc_kwargs,
                                    bounds_lower, bounds_upper)
