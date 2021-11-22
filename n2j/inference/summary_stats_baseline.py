@@ -132,10 +132,12 @@ class Matcher:
         self.test_y = test_y
         self.out_dir = out_dir
         os.makedirs(self.out_dir, exist_ok=True)
+        self.orig_samples_dir = os.path.join(self.out_dir, 'orig_samples')
+        os.makedirs(self.orig_samples_dir, exist_ok=True)
         self.overview_path = osp.join(self.out_dir, 'overview.csv')
 
     def match_summary_stats(self, thresholds, interim_pdf_func=None,
-                            min_matches=1000):
+                            min_matches=1000, k_max=np.inf):
         """Match summary stats between train and test
 
         Parameters
@@ -171,9 +173,10 @@ class Matcher:
                                         test_x,
                                         self.train_y,
                                         t)
+                    accepted = accepted[accepted < k_max]
                     n_matches = len(accepted)
-                    np.save(osp.join(self.out_dir,
-                                     f'matched_k_los_{i}_ss_{s}_{t:.0f}.npy'),
+                    np.save(osp.join(self.orig_samples_dir,
+                                     f'matched_k_los_{i}_ss_{s}_{t:.3f}.npy'),
                             accepted)
                     # Add descriptive stats to overview table
                     row = dict(los_i=i,
@@ -182,21 +185,26 @@ class Matcher:
                                test_x=test_x,
                                n_matches=n_matches)
                     optimal_crit[t_idx] = n_matches
-                    if len(accepted) > 0:
+                    if len(accepted) > 1:
                         if interim_pdf_func is not None:
+                            norm_obj = stats.norm(loc=np.median(accepted),
+                                                  scale=stats.median_abs_deviation(accepted))
+                            rng = np.random.RandomState(i)
+                            accepted = norm_obj.rvs(20000, random_state=rng)
                             inv_prior = 1.0/interim_pdf_func(accepted)
                             try:
                                 resamples = iutils.resample_from_samples(accepted,
                                                                          inv_prior,
-                                                                         n_resamples=10000,
+                                                                         n_resamples=20000,
                                                                          plot_path=None)
+                                # resamples = resamples[resamples < k_max]
                             except ValueError:
                                 print(f"Sightline {i}")
                                 print("Accepted samples were of shape", accepted.shape)
                                 print("Threshold was", t)
                             resamples = resamples.squeeze()  # [n_resamples]
                             np.save(osp.join(self.out_dir,
-                                             f'matched_resampled_los_{i}_ss_{s}_{t:.0f}.npy'),
+                                             f'matched_resampled_los_{i}_ss_{s}_{t:.3f}.npy'),
                                     resamples)
                         else:
                             resamples = accepted  # do not weight
@@ -263,8 +271,8 @@ class Matcher:
                                   overview['summary_stats_name'] == ss_name),
                                   overview['is_optimal'])
             threshold = overview[crit]['threshold'].item()
-        path = osp.join(self.out_dir,
-                        f'matched_k_los_{idx}_ss_{ss_name}_{threshold:.0f}.npy')
+        path = osp.join(self.orig_samples_dir,
+                        f'matched_k_los_{idx}_ss_{ss_name}_{threshold:.3f}.npy')
         samples = np.load(path)
         return samples
 
