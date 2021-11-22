@@ -1,9 +1,9 @@
+astropy<5
 lenstronomy
 #future
 numpy
 matplotlib
 ipykernel
-astropy
 pandas
 dynesty
 tqdm
