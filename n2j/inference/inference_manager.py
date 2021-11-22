@@ -809,13 +809,18 @@ class InferenceManager:
         np.save(self.reweighted_bnn_kappa_per_sample_path,
                 k_reweighted_per_sample)
         return k_reweighted_grid, k_reweighted_per_sample
+    
+    def get_omega_samples(self, chain_path, chain_kwargs, log_idx=None):
+        omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
+        if log_idx is not None:
+            omega_post_samples[:, log_idx] = np.exp(omega_post_samples[:, log_idx])
+        return omega_post_samples
 
     def visualize_omega_post(self, chain_path, chain_kwargs,
                              corner_kwargs, log_idx=None):
         # MCMC samples ~ [n_omega, 2]
-        omega_post_samples = iutils.get_mcmc_samples(chain_path, chain_kwargs)
-        if log_idx is not None:
-            omega_post_samples[:, log_idx] = np.exp(omega_post_samples[:, log_idx])
+        omega_post_samples = self.get_omega_samples(chain_path, chain_kwargs, 
+                                                    log_idx=log_idxs)
         print(f"Plotting {omega_post_samples.shape[0]} samples...")
         fig = corner.corner(omega_post_samples,
                             **corner_kwargs)
