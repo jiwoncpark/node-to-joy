@@ -40,7 +40,7 @@ extensions = [
 autoapi_type = 'python'
 autoapi_dirs = ['../n2j']
 autodoc_mock_imports = ["torch", "torchvision"]
-exclude_patterns = ['../demo']
+exclude_patterns = ['../demo', '../n2j/tests']
 
 html_math_renderer = 'mathjax'
 
