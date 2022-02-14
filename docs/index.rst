@@ -8,9 +8,12 @@ Welcome to node-to-joy's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: API Reference:
 
-
+   installation
+   generation
+   training
+   inference
 
 Indices and tables
 ==================
