@@ -1,0 +1,2 @@
+sphinx-autoapi
+pydata-sphinx-theme
