@@ -632,7 +632,7 @@ class InferenceManager:
                                                       threshold=None)
             # Fit Gaussian on matched posterior samples
             norm_i = scipy.stats.norm(loc=np.median(samples_orig_i), 
-                                scale=scipy.stats.median_abs_deviation(samples_orig_i))
+                                scale=scipy.stats.median_abs_deviation(samples_orig_i, scale='normal'))
             rng = np.random.RandomState(i)
             samples_i = norm_i.rvs(20000, random_state=rng)
             log_p_i = self.get_log_p_k_given_omega_int_per_los(i, samples_i, interim_pdf_func,
@@ -952,21 +952,21 @@ class InferenceManager:
                              med=med,
                              plus_1sig=upper - med,
                              mae=np.median(np.abs(pre_samples - true_k)),
-                             mad=scipy.stats.median_abs_deviation(pre_samples))
+                             mad=scipy.stats.median_abs_deviation(pre_samples, scale='normal'))
             lower, med, upper = np.quantile(post_samples,
                                             [0.5-0.34, 0.5, 0.5+0.34])
             post_stats.update(minus_1sig=med - lower,
                               med=med,
                               plus_1sig=upper - med,
                               mae=np.median(np.abs(post_samples - true_k)),
-                              mad=scipy.stats.median_abs_deviation(post_samples))
+                              mad=scipy.stats.median_abs_deviation(post_samples, scale='normal'))
             lower, med, upper = np.quantile(post_samples_grid,
                                             [0.5-0.34, 0.5, 0.5+0.34])
             post_stats_grid.update(minus_1sig=med - lower,
                                    med=med,
                                    plus_1sig=upper - med,
                                    mae=np.median(np.abs(post_samples_grid - true_k)),
-                                   mad=scipy.stats.median_abs_deviation(post_samples_grid))
+                                   mad=scipy.stats.median_abs_deviation(post_samples_grid, scale='normal'))
             pre_metrics = pre_metrics.append(pre_stats,
                                              ignore_index=True)
             post_metrics = post_metrics.append(post_stats,

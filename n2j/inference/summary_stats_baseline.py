@@ -186,19 +186,22 @@ class Matcher:
                                n_matches=n_matches)
                     optimal_crit[t_idx] = n_matches
                     if len(accepted) > 1:
+                        # Fit normal on accepted samples, to resample from
+                        norm_obj = stats.norm(loc=np.median(accepted),
+                                              scale=stats.median_abs_deviation(accepted, scale='normal'))
+                        rng = np.random.RandomState(i)
+                        accepted_norm = norm_obj.rvs(20000, random_state=rng)
                         if interim_pdf_func is not None:
-                            norm_obj = stats.norm(loc=np.median(accepted),
-                                                  scale=stats.median_abs_deviation(accepted))
-                            rng = np.random.RandomState(i)
-                            accepted = norm_obj.rvs(20000, random_state=rng)
-                            inv_prior = 1.0/interim_pdf_func(accepted)
+                            inv_prior = 1.0/interim_pdf_func(accepted_norm)
+                            # Reweight normal samples
                             try:
-                                resamples = iutils.resample_from_samples(accepted,
+                                resamples = iutils.resample_from_samples(accepted_norm,
                                                                          inv_prior,
                                                                          n_resamples=20000,
                                                                          plot_path=None)
                                 # resamples = resamples[resamples < k_max]
                             except ValueError:
+                                print("Reweighting normal")
                                 print(f"Sightline {i}")
                                 print("Accepted samples were of shape", accepted.shape)
                                 print("Threshold was", t)
@@ -207,13 +210,14 @@ class Matcher:
                                              f'matched_resampled_los_{i}_ss_{s}_{t:.3f}.npy'),
                                     resamples)
                         else:
-                            resamples = accepted  # do not weight
+                            resamples = accepted_norm  # do not weight
+                        # Computing summary stats metrics
                         lower, med, upper = np.quantile(resamples,
                                                         [0.5-0.34, 0.5, 0.5+0.34])
                         row.update(med=med,
                                    plus_1sig=upper-med,
                                    minus_1sig=med-lower,
-                                   mad=stats.median_abs_deviation(resamples)
+                                   mad=stats.median_abs_deviation(resamples, scale='normal')
                                    )
                         # Comparison with truth, if available
                         if self.test_y is not None:
