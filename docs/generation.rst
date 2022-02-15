@@ -27,7 +27,7 @@ On NERSC, run `generate_data_any.py` with the CosmoDC2 healpix ID as the keyword
 
 ::
 
-$python generate_data_any 10450
+$python generate_data_any.py 10450
 
 
 The healpix IDs currently available are: 9559, 9686, 9687, 9814, 9815, 9816, 9942, 9943, 10070, 10071, 10072, 10198, 10199, 10200, 10326, 10327, and 10450.
