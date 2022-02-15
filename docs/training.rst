@@ -20,19 +20,19 @@ First, we configure the dataloader. This means setting the training healpixes of
       train_dist_name: 'norm'
       train_dist_kwargs:
         loc: 0.01
-        scale: 0.03
-      in_dir: '/global/cscratch1/sd/jwp/n2j/data'
-      train_hp: [10327]
-      val_hp: [10450]
-      n_train: [20000]
+        scale: 0.04
+      in_dir: '/global/cscratch1/sd/jwp/n2j/data_v04'
+      train_hp: [9559, 10327, 9687, 9814, 9815, 9816, 9942, 9943, 10070, 10071, 10072, 10198]
+      val_hp: [10199, 10200, 10450]
+      n_train: [50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000]
       # Final effective training set size
-      n_subsample_train: 50000
-      n_val: [50000]
+      n_subsample_train: 200000
+      n_val: [50000, 50000, 50000]
       # Final effective val set size
       n_subsample_val: 1000
       batch_size: 1000
       val_batch_size: 1000
-      num_workers: 8
+      num_workers: 18
       # Global (graph-level) target; final_gamma1, final_gamm2 also available
       sub_target: ['final_kappa']
       # Local (node-level) target
@@ -58,7 +58,19 @@ First, we configure the dataloader. This means setting the training healpixes of
           depth: 5
       detection_kwargs:
         ref_features: ['mag_i_lsst']
-        max_vals: [22.0]
+        max_vals: [25.3]
+    # Optimizer kwargs
+    optimization:
+      early_stop_memory: 50
+      weight_local_loss: 0.1
+      optim_kwargs:
+        lr: 0.002
+        weight_decay: 0.0001
+      lr_scheduler_kwargs:
+        patience: 5
+        factor: 0.5
+        min_lr: 0.0000001
+        verbose: True
 
 
 Then we configure the optimizer, i.e. the weighting between the loss of global convergence labels and local stellar mass and redshift labels, early-stopping, initial learning rate, learning rate decay.
