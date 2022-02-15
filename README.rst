@@ -8,7 +8,7 @@ This package contains functionality to
 photometric measurements of galaxies around a line of sight
 * hierarchically infer the mean and standard deviation of convergence in the population
 
-.. image:: plots/gallery.png
+.. image:: plots/gallery_opaque.png
 
 .. image:: https://readthedocs.org/projects/node-to-joy/badge/?version=latest
         :target: https://node-to-joy.readthedocs.io/en/latest/?badge=latest
