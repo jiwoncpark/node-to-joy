@@ -1,0 +1,110 @@
+############
+# Training #
+############
+# Dataloader kwargs
+data:
+  train_dist_name: 'norm'
+  train_dist_kwargs:
+    loc: 0.01
+    scale: 0.04
+  in_dir: '/global/cscratch1/sd/jwp/n2j/data_v04'
+  train_hp: [9559, 10327, 9687, 9814, 9815, 9816, 9942, 9943, 10070, 10071, 10072, 10198] 
+  val_hp: [10199, 10200, 10450]
+  n_train: [50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000]
+  # Final effective training set size
+  n_subsample_train: 200000
+  n_val: [50000, 50000, 50000]
+  # Final effective val set size
+  n_subsample_val: 1000
+  batch_size: 1000
+  val_batch_size: 1000
+  num_workers: 18
+  # Global (graph-level) target; final_gamma1, final_gamm2 also available
+  sub_target: ['final_kappa']
+  # Local (node-level) target
+  sub_target_local: ['stellar_mass', 'redshift']
+  # Features available; do not modify (determined at data generation time)
+  features: ['galaxy_id', 'ra', 'dec', 'redshift',
+              'ra_true', 'dec_true', 'redshift_true',
+              'bulge_to_total_ratio_i',
+              'ellipticity_1_true', 'ellipticity_2_true',
+              'ellipticity_1_bulge_true', 'ellipticity_1_disk_true',
+              'ellipticity_2_bulge_true', 'ellipticity_2_disk_true',
+              'shear1', 'shear2', 'convergence',
+              'size_bulge_true', 'size_disk_true', 'size_true',
+              'mag_u_lsst', 'mag_g_lsst', 'mag_r_lsst',
+              'mag_i_lsst', 'mag_z_lsst', 'mag_Y_lsst']
+  # Features to use as input
+  sub_features: ['ra_true', 'dec_true',
+                  'mag_u_lsst', 'mag_g_lsst', 'mag_r_lsst',
+                  'mag_i_lsst', 'mag_z_lsst', 'mag_Y_lsst']
+  noise_kwargs:
+    mag:
+      override_kwargs: null
+      depth: 5
+  detection_kwargs:
+    ref_features: ['mag_i_lsst']
+    max_vals: [25.3]
+# Optimizer kwargs
+optimization:
+  early_stop_memory: 50
+  weight_local_loss: 0.1
+  optim_kwargs:
+    lr: 0.002
+    weight_decay: 0.0001
+  lr_scheduler_kwargs:
+    patience: 5
+    factor: 0.5
+    min_lr: 0.0000001
+    verbose: True
+# Model kwargs
+model:
+  dim_local: 50
+  dim_global: 50
+  dim_hidden: 50
+  dim_pre_aggr: 50
+  n_iter: 5
+  n_out_layers: 5
+  dropout: 0.005
+  global_flow: False
+# Trainer attributes
+trainer:
+  device_type: 'cuda'
+  checkpoint_dir: '/global/cscratch1/sd/jwp/n2j/apj_v4/seed1'
+  seed: 1
+n_epochs: 200
+# If you want to resume training from a checkpoint
+resume_from:
+  checkpoint_path: '/global/cscratch1/sd/jwp/n2j/apj_v4/seed1/N2JNet_epoch=118_10-25-2021_08:10.mdl'
+#############
+# Inference #
+#############
+inference_manager:
+  device_type: 'cpu'
+  out_dir: '/global/cscratch1/sd/jwp/n2j/apj_v4/seed1/inference_E5_N1000_testset2'
+  seed: 1025
+test_data:
+  seed: 2
+  batch_size: 1000
+  test_hp: [10326, 9686]
+  n_test: [50000, 50000]
+  n_subsample_test: 1000
+  dist_name: 'norm'
+  dist_kwargs:
+    loc: 0.08
+    scale: 0.005
+summary_stats:
+  thresholds:
+    N: [0, 1, 2, 4, 8, 16, 32, 64, 128]
+    N_inv_dist: [0.01, 0.05, 0.1, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256]
+  min_matches: 2000
+# Replace with your own
+checkpoint_path: '/global/cscratch1/sd/jwp/n2j/apj_v4/seed1/N2JNet_epoch=118_10-25-2021_08:10.mdl'
+run_mcmc: True
+extra_mcmc_kwargs:
+  n_run: 20
+  n_burn: 20
+  n_walkers: 40
+  plot_chain: True
+  clear: True
+  n_cores: 4
