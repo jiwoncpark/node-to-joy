@@ -3,6 +3,7 @@ Node to Joy - Modeling the external convergence from photometric catalogs
 =========================================================================
 
 This package contains functionality to
+
 * postprocess the coarse convergence values of an existing simulation to introduce finer fluctuations at galaxy-galaxy lensing scales
 * train a Bayesian graph neural network to infer convergence given
 photometric measurements of galaxies around a line of sight
