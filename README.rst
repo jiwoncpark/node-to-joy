@@ -2,6 +2,10 @@
 Node to Joy - Modeling the external convergence from photometric catalogs
 =========================================================================
 
+.. image:: https://readthedocs.org/projects/node-to-joy/badge/?version=latest
+        :target: https://node-to-joy.readthedocs.io/en/latest/?badge=latest
+        :alt: Documentation Status
+        
 This package contains functionality to
 
 * postprocess the coarse convergence values of an existing simulation to introduce finer fluctuations at galaxy-galaxy lensing scales
@@ -9,10 +13,6 @@ This package contains functionality to
 * hierarchically infer the mean and standard deviation of convergence in the population
 
 .. image:: plots/gallery_opaque.png
-
-.. image:: https://readthedocs.org/projects/node-to-joy/badge/?version=latest
-        :target: https://node-to-joy.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
 
 Installation
 ============
